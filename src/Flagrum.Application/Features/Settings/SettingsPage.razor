@@ -1,4 +1,5 @@
 ﻿@page "/settings"
+@using System.IO
 @using Flagrum.Abstractions.AssetExplorer
 @using Flagrum.Application.Features.ModManager.Services
 @using Flagrum.Application.Features.Settings.Data
@@ -167,6 +168,8 @@
              OnYes="RestartApplication"
              OnNo="CancelRestart"/>
 
+<PromptModal @ref="ResetPrompt"/>
+
 <AlertModal @ref="Alert"/>
 
 @code
@@ -181,6 +184,7 @@
 
     public AlertModal Alert { get; set; }
     private PromptModal RestartPrompt { get; set; }
+    private PromptModal ResetPrompt { get; set; }
     private LanguageTable LanguageTable { get; set; } = new();
     private RegenerateModal RegenerateModal { get; set; }
     private bool AddressBarToggle { get; set; }
@@ -325,8 +329,51 @@
 
     private void ForceReset()
     {
-        ModManager.Reset();
-        Alert.Open("Success", "Reset Complete", "The reset was performed successfully.", null);
+        if (Profile.IsGameRunning())
+        {
+            Alert.Open("Error", "The Game is Running",
+                "Flagrum cannot reset mods while the game is running. Please save and close down the game, then try again.",
+                null);
+            return;
+        }
+
+        if (Profile.Current.Type != LuminousGame.Forspoken)
+        {
+            PerformForceReset();
+            return;
+        }
+
+        // Make sure the user knows which c000.earc they are about to get back, as the backup is only made once
+        var backup = Path.Combine(Profile.GameDataDirectory, "c000.backup");
+        ResetPrompt.Title = "Force Reset/Cleanup";
+        ResetPrompt.Heading = "Are you sure?";
+        ResetPrompt.Subtext = File.Exists(backup)
+            ? "This turns off every mod and puts back the copy of c000.earc that Flagrum saved on " +
+              $"<strong>{File.GetCreationTime(backup):d MMMM yyyy}</strong>.<br/><br/>" +
+              "If Forspoken has been updated, or you have used Steam's \"Verify integrity of game files\" " +
+              "since then, that copy is out of date. In that case, cancel and use Steam's verify instead."
+            : "Flagrum has no saved copy of c000.earc, so this only turns off every mod in Flagrum and deletes " +
+              "the mod files. Use Steam's \"Verify integrity of game files\" first to restore c000.earc, " +
+              "then use this button to clean up.";
+        ResetPrompt.YesText = "Reset";
+        ResetPrompt.NoText = "Cancel";
+        ResetPrompt.OnYes = PerformForceReset;
+        ResetPrompt.Open();
+    }
+
+    private void PerformForceReset()
+    {
+        try
+        {
+            ModManager.Reset();
+            Alert.Open("Success", "Reset Complete", "The reset was performed successfully.", null);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Force reset failed");
+            var (heading, message) = ModOperationError.Describe(exception);
+            Alert.Open("Error", heading, message, null, 500, 340);
+        }
     }
 
     /// <inheritdoc />
