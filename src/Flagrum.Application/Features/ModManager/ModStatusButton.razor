@@ -1,0 +1,48 @@
+@using Flagrum.Abstractions.ModManager.Project
+
+@* Vortex-style Enabled/Disabled button that switches a mod on or off when clicked *@
+@{
+    var isBusy = Parent.BusyModId == Mod.Identifier;
+    var isLocked = Parent.BusyModId != null && !isBusy;
+    var isEnabled = Parent.IsEnabled(Mod);
+}
+<div class="row rounded text-sm font-bold select-none transition-colors px-2 py-1
+            @(isEnabled ? "bg-green-700 text-white" : "bg-grey-700 text-grey-300")
+            @(isBusy || isLocked ? "cursor-default" : isEnabled ? "cursor-pointer hover:bg-green-600" : "cursor-pointer hover:bg-grey-600")"
+     style="width: @(Width)px; @(isLocked ? "opacity: 0.5;" : "")"
+     title="@(isEnabled ? "Click to turn this mod off" : "Click to turn this mod on")"
+     @onclick="OnClick"
+     @onclick:stopPropagation="true">
+    @if (isBusy)
+    {
+        <span class="material-icons mr-1.5 animate-spin" style="font-size: 1rem;">autorenew</span>
+        <span>Working</span>
+    }
+    else if (isEnabled)
+    {
+        <span class="material-icons mr-1.5" style="font-size: 1rem;">check</span>
+        <span>Enabled</span>
+    }
+    else
+    {
+        <span class="material-icons mr-1.5" style="font-size: 1rem;">remove</span>
+        <span>Disabled</span>
+    }
+</div>
+
+@code
+{
+    [CascadingParameter] public Index Parent { get; set; }
+
+    [Parameter] public IFlagrumProject Mod { get; set; }
+
+    [Parameter] public int Width { get; set; } = 108;
+
+    private void OnClick()
+    {
+        if (Parent.BusyModId == null)
+        {
+            Parent.ToggleMod(Mod);
+        }
+    }
+}

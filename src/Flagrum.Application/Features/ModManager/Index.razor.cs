@@ -36,9 +36,6 @@ public sealed partial class Index : ModComponentBase
     public bool IsLoading { get; set; }
     public string LoadingText { get; set; }
 
-    private int EnabledState { get; set; }
-    private int Category { get; set; } = -1;
-    private bool ShowActive => EnabledState == 0;
     private AutosizeModal ConflictsModal { get; set; }
     private AutosizeModal ReadmeModal { get; set; }
     private ModCardModal ModCardModal { get; set; }
@@ -50,10 +47,6 @@ public sealed partial class Index : ModComponentBase
     private TaskCompletionSource TaskCompletionSource { get; set; }
     private string DisplayText { get; set; }
     private string SubText { get; set; }
-    private List<Guid> TimestampsToUpdate { get; } = new();
-
-    private Func<IFlagrumProject, bool> Filter => m =>
-        ModManager.ModsState.GetActive(m.Identifier) == ShowActive;
 
     /// <inheritdoc />
     public async Task LaunchGameAsync(bool isDebug)
@@ -85,11 +78,8 @@ public sealed partial class Index : ModComponentBase
     {
         FileIndex.OnIsRegeneratingChanged += _ => InvokeAsync(StateHasChanged);
 
-        var enabledState = Configuration.Get<int>(StateKey.CurrentEarcEnabledState);
-        EnabledState = enabledState > -1 ? enabledState : 0;
-
-        var category = Configuration.Get<int>(StateKey.CurrentEarcCategory);
-        Category = category;
+        // Give mods from before the mod list existed an install date in one go
+        Metadata.EnsureInstalledDates(ModManager.Projects.Keys);
 
         foreach (var file in Directory.EnumerateFiles($@"{IOHelper.GetWebRoot()}\EarcMods"))
         {
@@ -132,20 +122,12 @@ public sealed partial class Index : ModComponentBase
         }
     }
 
+    /// <summary>
+    /// Makes the mod list reload a mod's picture after it has been changed.
+    /// </summary>
     public void AddTimestampToUpdate(Guid modId)
     {
-        TimestampsToUpdate.Add(modId);
-    }
-
-    public bool CheckTimestampUpdate(Guid modId)
-    {
-        if (TimestampsToUpdate.Contains(modId))
-        {
-            TimestampsToUpdate.Remove(modId);
-            return true;
-        }
-
-        return false;
+        _imageVersions[modId] = DateTime.UtcNow.Ticks;
     }
 
     public void CallStateHasChanged()
@@ -160,13 +142,6 @@ public sealed partial class Index : ModComponentBase
         IsLoading = isLoading;
         LoadingText = Localizer[message ?? ""];
         StateHasChanged();
-    }
-
-    private void SetEnabledState(int state)
-    {
-        EnabledState = state;
-        StateHasChanged();
-        Configuration.Set(StateKey.CurrentEarcEnabledState, state);
     }
 
     private Task Install()

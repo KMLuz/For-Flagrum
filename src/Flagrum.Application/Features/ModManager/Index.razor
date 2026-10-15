@@ -3,6 +3,7 @@
 @using Flagrum.Abstractions.ModManager
 @using Flagrum.Application.Features.ModManager.Launcher
 @using Flagrum.Application.Features.ModManager.Modals
+@using Flagrum.Application.Features.ModManager.Services
 @implements Flagrum.Abstractions.ModManager.IModLibrary
 
 @inject IPlatformService PlatformService
@@ -26,62 +27,124 @@
 
 <CascadingValue Value="this">
 
-    @if (!IsLoading)
-    {
-        <div class="flex flex-row items-center p-5 border-b border-t border-dark-600 sticky top-0 z-40 bg-dark">
-            <div class="flex flex-row items-center">
-                <div class="bg-dark-600 shadow-md rounded row mr-6">
-                    <ModTypeButtonGroup Target="@EnabledState" OnItemSelected="SetEnabledState">
-                        <ModTypeButton Text=@Localizer["ActiveMods"] Value="0"/>
-                        <ModTypeButton Text=@Localizer["DisabledMods"] Value="1"/>
-                    </ModTypeButtonGroup>
-                </div>
-            </div>
-            <div class="flex-grow"></div>
-            <Button Icon="add" Text=@Localizer["CreateMod"] CssClass="mr-4"
-                    OnClick="@(() => ModCardModal.Open(Guid.Empty))"/>
-            <Button Icon="upload" Text=@Localizer["InstallFromZip"] OnClickAsync="Install"/>
-            @if (Profile.Current.Type == LuminousGame.FFXV)
+    <div class="flex flex-row flex-grow h-full" style="min-height: 0;">
+        <div class="flex flex-col flex-grow" style="min-width: 0;">
+            @if (!IsLoading)
             {
-                <Button Icon="play_arrow" Text="Launch Game" IsLarge="true" CssClass="ml-6"
-                        BgColor="bg-green-700" BgHover="bg-green-500"
-                        OnClickAsync="() => LaunchGameAsync(false)"/>
-                <CascadingValue TValue="IModLibrary" Value="this">
-                    <PremiumComponent Type="PremiumComponentType.LaunchBarActions"/>
-                </CascadingValue>
-            }
-        </div>
-    }
-    <LoadingView IsLoading="IsLoading" Text="@LoadingText" CssClass="h-full">
-        @{
-            var items = ModManager.Projects.Values
-                .Where(Filter)
-                .OrderByDescending(m => ModManager.ModsState.GetPinned(m.Identifier))
-                .ThenBy(m => m.Name)
-                .ToList();
-
-            if (items.Any())
-            {
-                <div class="px-4 pb-8 flex flex-row flex-wrap">
-                    @foreach (var item in items)
+                <div class="flex flex-row items-center px-5 py-4 border-b border-t border-dark-600 bg-dark">
+                    <div class="row bg-dark-600 rounded px-2 mr-5" style="width: 260px;">
+                        <span class="material-icons text-grey-500 mr-2" style="font-size: 1.1rem;">search</span>
+                        <input class="bg-transparent text-grey-200 py-1.5 flex-grow outline-none" style="min-width: 0;"
+                               placeholder="Search mods..." @bind="SearchText" @bind:event="oninput"/>
+                    </div>
+                    <span class="text-sm text-grey-500 mr-2">Status</span>
+                    <select class="bg-dark-600 text-grey-200 rounded px-2 py-1.5 mr-5 border border-dark-550"
+                            @bind="StatusFilter">
+                        @foreach (var status in Enum.GetValues<ModStatusFilter>())
+                        {
+                            <option value="@status">@status</option>
+                        }
+                    </select>
+                    <span class="text-sm text-grey-500 mr-2">Category</span>
+                    <select class="bg-dark-600 text-grey-200 rounded px-2 py-1.5 border border-dark-550"
+                            value="@(CategoryFilter?.ToString() ?? "")" @onchange="ChangeCategoryFilter">
+                        <option value="">All</option>
+                        @foreach (var category in Enum.GetValues<ModListCategory>())
+                        {
+                            <option value="@category">@category</option>
+                        }
+                    </select>
+                    <div class="flex-grow"></div>
+                    <Button Icon="add" Text=@Localizer["CreateMod"] CssClass="mr-4"
+                            OnClick="@(() => ModCardModal.Open(Guid.Empty))"/>
+                    <Button Icon="upload" Text=@Localizer["InstallFromZip"] OnClickAsync="Install"/>
+                    @if (Profile.Current.Type == LuminousGame.FFXV)
                     {
-                        <ModCard Mod="item" IsDisabled="false"/>
+                        <Button Icon="play_arrow" Text="Launch Game" IsLarge="true" CssClass="ml-6"
+                                BgColor="bg-green-700" BgHover="bg-green-500"
+                                OnClickAsync="() => LaunchGameAsync(false)"/>
+                        <CascadingValue TValue="IModLibrary" Value="this">
+                            <PremiumComponent Type="PremiumComponentType.LaunchBarActions"/>
+                        </CascadingValue>
                     }
                 </div>
             }
-            else
-            {
-                <div class="p-8 flex flex-row h-full">
-                    <div class="self-center mx-auto text-center">
-                        <span class="text-grey-600 material-icons block mb-4" style="font-size: 120px;">inbox</span>
-                        <span class="text-grey-600 text-lg font-display">
-                            @(!ModManager.Projects.Any() ? Localizer["NoMods"] : ShowActive ? Localizer["NoActiveMods"] : Localizer["NoDisabledMods"])
-                        </span>
-                    </div>
-                </div>
-            }
+            <div class="flex-grow overflow-auto" style="min-height: 0;">
+                <LoadingView IsLoading="IsLoading" Text="@LoadingText" CssClass="h-full">
+                    @{
+                        var items = GetVisibleMods();
+
+                        <div class="grid items-center px-5 py-2 text-sm text-grey-500 border-b border-dark-600 bg-dark select-none sticky top-0 z-40"
+                             style="grid-template-columns: @ListColumns;">
+                            @SortHeader("Status", ModSortColumn.Status)
+                            <span></span>
+                            @SortHeader("Mod Name", ModSortColumn.Name)
+                            @SortHeader("Category", ModSortColumn.Category)
+                            @SortHeader("Files", ModSortColumn.Files)
+                            @SortHeader("Installed", ModSortColumn.Installed)
+                            <span></span>
+                        </div>
+
+                        if (items.Any())
+                        {
+                            foreach (var mod in items)
+                            {
+                                var isSelected = SelectedModId == mod.Identifier;
+                                var isEnabled = IsEnabled(mod);
+                                <ContextMenuTrigger MenuId="modCardContextMenu" @onmouseup="e => RowMouseUp(e, mod)">
+                                    <div class="grid items-center px-5 py-2 border-b border-dark-600 cursor-pointer transition-colors @(isSelected ? "bg-grey-750" : "hover:bg-grey-800")"
+                                         style="grid-template-columns: @ListColumns;"
+                                         @onclick="() => SelectMod(mod)">
+                                        <ModStatusButton Mod="mod"/>
+                                        <div class="rounded bg-grey-800"
+                                             style="width: 40px; height: 40px; background-repeat: no-repeat; background-size: cover; background-position: center; background-image: url('@GetImageUrl(mod.Identifier)'); @(isEnabled ? "" : "filter: grayscale(100%); opacity: 0.6;")">
+                                        </div>
+                                        <div class="pr-4" style="min-width: 0;">
+                                            <div class="row">
+                                                @if (ModManager.ModsState.GetPinned(mod.Identifier))
+                                                {
+                                                    <span class="material-icons text-accent1-200 mr-1" style="font-size: 0.9rem; rotate: 45deg;" title="Pinned">push_pin</span>
+                                                }
+                                                <span class="truncate @(isEnabled ? "text-grey-200" : "text-grey-400")">@mod.Name</span>
+                                            </div>
+                                            @if (!string.IsNullOrWhiteSpace(mod.Author))
+                                            {
+                                                <span class="block truncate text-xs text-grey-500">@mod.Author</span>
+                                            }
+                                        </div>
+                                        <span class="text-sm text-grey-300">@Metadata.GetCategory(mod.Identifier)</span>
+                                        <span class="text-sm text-grey-300">@GetModFiles(mod).Count</span>
+                                        <span class="text-sm text-grey-300">@Metadata.GetInstalledAt(mod.Identifier).ToString("d MMM yyyy")</span>
+                                        <ContextMenuTrigger MenuId="modCardContextMenu" MouseButtonTrigger="MouseButtonTrigger.Left">
+                                            <span class="material-icons text-grey-400 hover:text-white rounded hover:bg-grey-700 p-1"
+                                                  title="More actions"
+                                                  @onmousedown="() => SetContextMod(mod)">more_vert</span>
+                                        </ContextMenuTrigger>
+                                    </div>
+                                </ContextMenuTrigger>
+                            }
+                        }
+                        else
+                        {
+                            <div class="p-8 flex flex-row">
+                                <div class="mx-auto mt-16 text-center">
+                                    <span class="text-grey-600 material-icons block mb-4" style="font-size: 120px;">inbox</span>
+                                    <span class="text-grey-600 text-lg font-display">
+                                        @(!ModManager.Projects.Any() ? Localizer["NoMods"] : "No mods match these filters")
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                    }
+                </LoadingView>
+            </div>
+        </div>
+
+        @if (!IsLoading && SelectedMod is { } selectedMod)
+        {
+            <ModDetailsPanel Mod="selectedMod"/>
         }
-    </LoadingView>
+    </div>
 
     <ModCardContextMenu/>
 
@@ -154,3 +217,16 @@
     <AlertModal @ref="Alert"/>
 
 </CascadingValue>
+
+@code
+{
+    private RenderFragment SortHeader(string text, ModSortColumn column) =>
+        @<div class="row cursor-pointer hover:text-grey-200 @(SortColumn == column ? "text-grey-200" : "")"
+              @onclick="() => SortBy(column)">
+            <span>@text</span>
+            @if (SortColumn == column)
+            {
+                <span class="material-icons ml-1" style="font-size: 1rem;">@(SortDescending ? "arrow_downward" : "arrow_upward")</span>
+            }
+        </div>;
+}

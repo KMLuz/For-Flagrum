@@ -85,93 +85,9 @@
 
     private ContextMenu ContextMenu { get; set; }
 
-    private void EnableMod()
-    {
-        if (Profile.IsGameRunning())
-        {
-            Parent.Alert.Open("Error", "The Game is Running", "Flagrum cannot enable or disable mods while the game is running. Please save and close down the game, then try again.", null);
-            return;
-        }
+    private void EnableMod() => Parent.EnableMod(Parent.GetContextMod());
 
-        ThreadHelper.RunOnNewThread(async () =>
-        {
-            await Task.Run(async () =>
-            {
-                await InvokeAsync(() => Parent.SetLoading(true, "Enabling Mod"));
-
-                try
-                {
-                    await EnableContextMod();
-                }
-                catch (Exception exception)
-                {
-                    Parent.ShowModOperationError(exception);
-                }
-
-                await InvokeAsync(() => Parent.SetLoading(false));
-            });
-        });
-    }
-
-    private async Task EnableContextMod()
-    {
-        var mod = Parent.GetContextMod();
-        var deadFiles = ModManagerService.Projects[mod.Identifier].GetDeadFiles();
-        if (deadFiles.Any())
-        {
-            var message = deadFiles.Aggregate("The mod could not be built as the following files were missing:<ul class='mt-4'>",
-                (current, file) => current + $"<li>{file}</li>");
-            await InvokeAsync(() => Parent.Alert.Open("Error", "Missing Files", message + "</ul>", null, 400, 300, true));
-            return;
-        }
-
-        if (EarlyAccessMods.GuidMap.ContainsKey(mod.Identifier) && !Authentication.IsAuthenticated)
-        {
-            await InvokeAsync(() => Parent.Alert.Open("Error", "Flagrum+ Required",
-                "This mod requires Flagrum+ to run. Please ensure you are subscribed to the Flagrum" +
-                " Patreon and have linked your Patreon account in the Settings tab.",
-                null));
-            return;
-        }
-
-        if (!Parent.CheckReferencesValid(mod.Identifier))
-        {
-            return;
-        }
-
-        var taskId = await Parent.CheckConflicts(mod.Identifier, async () => await ModManagerService.EnableMod(mod));
-        await Parent.TaskCompletionSources[taskId].Task;
-        Parent.TaskCompletionSources.Remove(taskId);
-    }
-
-    private void DisableMod()
-    {
-        if (Profile.IsGameRunning())
-        {
-            Parent.Alert.Open("Error", "The Game is Running", "Flagrum cannot enable or disable mods while the game is running. Please save and close down the game, then try again.", null);
-            return;
-        }
-
-        ThreadHelper.RunOnNewThread(async () =>
-        {
-            await Task.Run(async () =>
-            {
-                await InvokeAsync(() => Parent.SetLoading(true, "DisablingMod"));
-
-                try
-                {
-                    var mod = Parent.GetContextMod();
-                    await ModManagerService.DisableMod(mod);
-                }
-                catch (Exception exception)
-                {
-                    Parent.ShowModOperationError(exception);
-                }
-
-                await InvokeAsync(() => Parent.SetLoading(false));
-            });
-        });
-    }
+    private void DisableMod() => Parent.DisableMod(Parent.GetContextMod());
 
     private void TogglePin()
     {
@@ -181,42 +97,7 @@
         Parent.CallStateHasChanged();
     }
 
-    private void DeleteMod()
-    {
-        var mod = Parent.GetContextMod();
-        if (ModManagerService.ModsState.GetActive(mod.Identifier) && Profile.IsGameRunning())
-        {
-            Parent.Alert.Open("Error", "The Game is Running", "Flagrum cannot delete enabled mods while the game is running. Please save and close down the game, then try again.", null);
-            return;
-        }
-
-        Parent.Prompt.Title = "Delete Mod";
-        Parent.Prompt.Heading = "Are you sure?";
-        Parent.Prompt.Subtext = "This action cannot be undone!";
-        Parent.Prompt.YesText = "Delete";
-        Parent.Prompt.NoText = "Cancel";
-        Parent.Prompt.OnNo = null;
-        Parent.Prompt.OnYes = async () => await InvokeAsync(async () =>
-        {
-            Parent.LoadingText = "Deleting Mod";
-            Parent.IsLoading = true;
-            Parent.CallStateHasChanged();
-
-            try
-            {
-                await Task.Run(async () => await ModManagerService.DeleteMod(mod));
-            }
-            catch (Exception exception)
-            {
-                Parent.ShowModOperationError(exception);
-            }
-
-            Parent.IsLoading = false;
-            Parent.CallStateHasChanged();
-        });
-
-        Parent.Prompt.Open();
-    }
+    private void DeleteMod() => Parent.DeleteMod(Parent.GetContextMod());
 
     private void Export()
     {

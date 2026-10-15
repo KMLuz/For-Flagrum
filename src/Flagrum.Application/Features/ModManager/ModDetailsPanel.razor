@@ -1,0 +1,120 @@
+@using System.IO
+@using Flagrum.Abstractions.ModManager.Project
+@using Flagrum.Application.Features.ModManager.Services
+
+@{
+    var files = Index.GetModFiles(Mod);
+    var missingCount = files.Count(f => IsMissing(f.SourceFile));
+    var hasReadme = !string.IsNullOrWhiteSpace(Mod.Readme) && Mod.Readme.Trim() != "<p><br></p>";
+}
+
+<div class="h-full flex flex-col bg-dark border-l border-dark-550" style="width: 400px; flex: 0 0 400px;">
+    <div class="row px-4 py-3 border-b border-dark-550">
+        <span class="text-grey-300 flex-grow font-display">Mod Details</span>
+        <span class="material-icons cursor-pointer text-grey-400 hover:text-white" title="Close"
+              @onclick="Parent.CloseDetailsPanel">close</span>
+    </div>
+
+    <div class="flex-grow overflow-auto">
+        <div class="bg-grey-800"
+             style="width: 100%; height: 200px; background-repeat: no-repeat; background-size: cover; background-position: center; background-image: url('@Parent.GetImageUrl(Mod.Identifier)')">
+        </div>
+
+        <div class="p-4">
+            <h4 class="text-grey-200 font-display mb-1" style="overflow-wrap: anywhere;">@Mod.Name</h4>
+            @if (!string.IsNullOrWhiteSpace(Mod.Author))
+            {
+                <div class="row text-grey-400 mb-3">
+                    <span class="material-icons mr-1.5" style="font-size: 1rem;">person</span>
+                    <span>@Mod.Author</span>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Mod.Description))
+            {
+                <p class="text-sm text-grey-300 mb-4" style="white-space: pre-wrap;">@Mod.Description</p>
+            }
+
+            <div class="grid gap-2 text-sm mb-4" style="grid-template-columns: 90px 1fr; align-items: center;">
+                <span class="text-grey-500">Status</span>
+                <ModStatusButton Mod="Mod"/>
+
+                <span class="text-grey-500">Category</span>
+                <select class="bg-dark-600 text-grey-200 rounded px-2 py-1 border border-dark-550"
+                        value="@Parent.ModMetadata.GetCategory(Mod.Identifier)"
+                        @onchange="ChangeCategory">
+                    @foreach (var category in Enum.GetValues<ModListCategory>())
+                    {
+                        <option value="@category">@category</option>
+                    }
+                </select>
+
+                <span class="text-grey-500">Installed</span>
+                <span class="text-grey-300">@Parent.ModMetadata.GetInstalledAt(Mod.Identifier).ToString("d MMMM yyyy, HH:mm")</span>
+            </div>
+
+            <div class="row flex-wrap mb-6">
+                <Button Icon="edit_note" Text="Edit Files" CssClass="mr-2 mb-2" OnClick="() => Parent.EditMod(Mod)"/>
+                <Button Icon="edit" Text="Edit Info" CssClass="mr-2 mb-2" OnClickAsync="() => Parent.EditModInfo(Mod)"/>
+                <Button Icon="folder_open" Text="Open Folder" CssClass="mr-2 mb-2" OnClick="() => Parent.OpenModFolder(Mod)"/>
+                @if (hasReadme)
+                {
+                    <Button Icon="description" Text="Readme" CssClass="mr-2 mb-2" OnClick="() => Parent.ShowReadme(Mod.Readme)"/>
+                }
+                <Button Icon="delete" Text="Delete" CssClass="mb-2" BgColor="bg-error" BgHover="bg-error-highlight"
+                        OnClick="() => Parent.DeleteMod(Mod)"/>
+            </div>
+
+            <div class="row mb-2">
+                <span class="text-grey-300 font-display flex-grow">Files (@files.Count)</span>
+                @if (missingCount > 0)
+                {
+                    <span class="row text-sm text-error">
+                        <span class="material-icons mr-1" style="font-size: 1rem;">warning</span>
+                        @missingCount missing
+                    </span>
+                }
+            </div>
+
+            @if (files.Count == 0)
+            {
+                <span class="text-sm text-grey-500">This mod doesn't change any files yet.</span>
+            }
+
+            @foreach (var file in files)
+            {
+                var isMissing = IsMissing(file.SourceFile);
+                <div class="rounded bg-grey-800 p-2 mb-2 text-xs" style="overflow-wrap: anywhere;">
+                    <div class="row mb-1">
+                        <span class="rounded-sm px-1.5 mr-2 bg-grey-700 text-grey-300">@file.Action</span>
+                        <span class="text-grey-200">@file.GameFile</span>
+                    </div>
+                    @if (file.SourceFile != null)
+                    {
+                        <div class="row @(isMissing ? "text-error" : "text-grey-500")" title="@(isMissing ? "This file no longer exists" : null)">
+                            <span class="material-icons mr-1" style="font-size: 0.8rem;">@(isMissing ? "warning" : "subdirectory_arrow_right")</span>
+                            <span>@file.SourceFile</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code
+{
+    [CascadingParameter] public Index Parent { get; set; }
+
+    [Parameter] public IFlagrumProject Mod { get; set; }
+
+    private static bool IsMissing(string path) => !string.IsNullOrWhiteSpace(path) && !File.Exists(path);
+
+    private void ChangeCategory(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<ModListCategory>(e.Value?.ToString(), out var category))
+        {
+            Parent.ModMetadata.SetCategory(Mod.Identifier, category);
+            Parent.CallStateHasChanged();
+        }
+    }
+}
