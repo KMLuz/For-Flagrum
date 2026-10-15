@@ -112,7 +112,7 @@
                         @if (build?.BuildLog != null)
                         {
                             <Button Icon="article" Text="@(ShowBuildLog ? "Hide Build Log" : "Build Log")" CssClass="mb-2"
-                                    OnClick="() => ShowBuildLog = !ShowBuildLog"/>
+                                    OnClick="ToggleBuildLog"/>
                             <span class="ml-2 mb-2 rounded-sm px-1.5 text-xs text-white @(build.Result == FskBuildResult.Fail ? "bg-error" : build.Result == FskBuildResult.Pass ? "bg-green-700" : "bg-grey-700")">
                                 @(build.Result == FskBuildResult.Unknown ? "No result" : build.Result.ToString().ToUpper())
                             </span>
@@ -171,6 +171,13 @@
 
     private Guid _shownModId;
     private bool ShowBuildLog { get; set; }
+
+    private void ToggleBuildLog()
+    {
+        // Buttons take a plain Action, so the panel has to ask to be redrawn itself
+        ShowBuildLog = !ShowBuildLog;
+        StateHasChanged();
+    }
 
     protected override void OnParametersSet()
     {

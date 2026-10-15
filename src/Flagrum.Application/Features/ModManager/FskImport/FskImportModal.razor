@@ -62,7 +62,7 @@
                                     <span class="block truncate text-xs text-grey-500">updates mod "@info.Mod.Name"</span>
                                 }
                             </div>
-                            <span class="text-grey-300">@(info.Build.Outfit ?? "—")</span>
+                            <span class="text-grey-300">@(info.Build.Outfit ?? (info.Build.IsSharedSkin ? "shared skin" : "—"))</span>
                             <span class="text-grey-300">@info.Build.Entries.Count</span>
                             <span>
                                 @switch (info.Build.Result)

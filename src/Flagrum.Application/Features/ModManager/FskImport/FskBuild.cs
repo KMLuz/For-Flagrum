@@ -48,6 +48,12 @@ public partial class FskBuild
     /// </summary>
     public string Outfit { get; private set; }
 
+    /// <summary>
+    /// Whether this is the add-on's shared skin build (face and body skin textures used by every outfit),
+    /// rather than an outfit build.
+    /// </summary>
+    public bool IsSharedSkin { get; private set; }
+
     public List<FskEntry> Entries { get; } = [];
 
     /// <summary>
@@ -110,6 +116,12 @@ public partial class FskBuild
                 if (outfit.Success)
                 {
                     Outfit ??= outfit.Groups[1].Value.Trim();
+                }
+
+                // e.g. "# Flagrum Replace entries for Frey_Skin (shared skin, merged)"
+                if (line.Contains("(shared skin", StringComparison.OrdinalIgnoreCase))
+                {
+                    IsSharedSkin = true;
                 }
 
                 continue;

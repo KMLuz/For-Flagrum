@@ -248,9 +248,11 @@ public class FskImportService(
                 Identifier = Guid.NewGuid(),
                 Name = newModName ?? build.Name,
                 Author = "FSK",
-                Description = build.Outfit == null
-                    ? "Imported from an FSK build."
-                    : $"Imported from an FSK build of outfit {build.Outfit}."
+                Description = build.IsSharedSkin
+                    ? "Shared skin textures for every outfit, imported from an FSK build. Keep this enabled."
+                    : build.Outfit == null
+                        ? "Imported from an FSK build."
+                        : $"Imported from an FSK build of outfit {build.Outfit}."
             };
         }
 
@@ -277,7 +279,7 @@ public class FskImportService(
         {
             SetDefaultThumbnail(mod.Identifier, modDirectory);
             modManager.ModsState.Add(mod.Identifier, new ModState());
-            metadata.SetCategory(mod.Identifier, ModListCategory.Outfit);
+            metadata.SetCategory(mod.Identifier, build.IsSharedSkin ? ModListCategory.Body : ModListCategory.Outfit);
         }
 
         // Make sure the new files get built rather than reusing the previous build's output
