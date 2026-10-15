@@ -116,18 +116,18 @@ public partial class ViewportHelper
                 if (mesh.Semantics.TryGetValue(VertexElementSemantic.TexCoord0, out var semantic))
                 {
                     builder.Append(
-                        ((IList<float[]>)mesh.Semantics[VertexElementSemantic.Position0]).Select(v => new Vector3(v))
+                        ((IList<float[]>)mesh.Semantics[VertexElementSemantic.Position0]).Select(v => new Vector3(v[..3]))
                         .ToList(),
                         faceIndices,
                         ((IList<float[]>)mesh.Semantics[VertexElementSemantic.Normal0]).Select(n => new Vector3(n[..3]))
                         .ToList(),
-                        ((IList<float[]>)semantic).Select(c => new Vector2(c))
+                        ((IList<float[]>)semantic).Select(c => new Vector2(c[..2]))
                         .ToList());
                 }
                 else
                 {
                     builder.Append(
-                        ((IList<float[]>)mesh.Semantics[VertexElementSemantic.Position0]).Select(v => new Vector3(v))
+                        ((IList<float[]>)mesh.Semantics[VertexElementSemantic.Position0]).Select(v => new Vector3(v[..3]))
                         .ToList(),
                         faceIndices,
                         ((IList<float[]>)mesh.Semantics[VertexElementSemantic.Normal0]).Select(n => new Vector3(n[..3]))
