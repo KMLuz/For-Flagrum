@@ -1370,7 +1370,7 @@ public class ImageBinary
             }
             else
             {
-                outputValueBytes = BitConverter.GetBytes(outputValue << (32 - outputBpp)).Reverse().ToArray();
+                outputValueBytes = Enumerable.Reverse(BitConverter.GetBytes(outputValue << (32 - outputBpp))).ToArray();
             }
 
             Buffer.BlockCopy(outputValueBytes, 0, outputData, j, outputBpp / 8);
