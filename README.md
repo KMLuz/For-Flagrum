@@ -20,11 +20,12 @@ See [addon/README.md](addon/README.md) for how to install and use it.
 
 You need the [.NET SDK](https://dotnet.microsoft.com/download) (8 or newer) on Windows.
 
-1. Download this repository as a zip (green **Code** button, **Download ZIP**) and unzip it.
+1. Download this repository as a zip (green **Code** button, **Download ZIP**) and unzip it into a new, empty
+   folder. Don't unzip over an older copy, as files left over from it can break the build.
 2. Double-click `Install-ForFlagrum.bat`. If Windows asks whether to run it, choose **Run**.
 3. Start ForFlagrum from the new shortcut on your desktop or in the Start menu.
 
-To update, download and unzip the new version and run `Install-ForFlagrum.bat` again. The app is installed to
+To update, download the new version, unzip it into a new, empty folder and run `Install-ForFlagrum.bat` again. The app is installed to
 `%LOCALAPPDATA%\ForFlagrum\app`. Mods and settings stay in `%LOCALAPPDATA%\Flagrum`, shared with an installed
 copy of the original Flagrum.
 

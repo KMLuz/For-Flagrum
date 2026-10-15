@@ -9,6 +9,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $install = Join-Path $env:LOCALAPPDATA 'ForFlagrum'
 $app = Join-Path $install 'app'
 $staging = Join-Path $install 'app-new'
+$buildLog = Join-Path $install 'build.log'
 
 function Stop-WithError([string] $message) {
     Write-Host ''
@@ -38,10 +39,17 @@ if (Test-Path $staging) {
     Remove-Item $staging -Recurse -Force
 }
 
+New-Item -ItemType Directory -Force -Path $install | Out-Null
+
 Write-Host '  Building... this takes a few minutes the first time.'
+# Only show errors on screen (the code has many harmless warnings), and keep the full output in a log file
 & dotnet publish (Join-Path $root 'src\Flagrum\Flagrum.csproj') -c Release -r win-x64 --self-contained false `
-    -o $staging --nologo -v quiet
+    -o $staging --nologo -tl:off -v quiet -clp:ErrorsOnly -fl "-flp:logfile=$buildLog;verbosity=normal"
 if ($LASTEXITCODE -ne 0) {
+    Write-Host ''
+    Write-Host '  If this folder was unzipped over an older copy of ForFlagrum, old files left behind can break the' -ForegroundColor Yellow
+    Write-Host '  build. Delete the folder, unzip the download into a new, empty folder and run this again.' -ForegroundColor Yellow
+    Write-Host "  The full build output is in $buildLog"
     Stop-WithError "The build failed (see the errors above). Your installed ForFlagrum hasn't been changed."
 }
 
@@ -73,6 +81,7 @@ foreach ($folder in @([Environment]::GetFolderPath('Desktop'), [Environment]::Ge
 
 Write-Host ''
 Write-Host '  Done! Start ForFlagrum from the shortcut on your desktop or in the Start menu.' -ForegroundColor Green
-Write-Host '  To update later, download the new version, unzip it and run Install-ForFlagrum.bat again.'
+Write-Host '  To update later, download the new version, unzip it into a new, empty folder'
+Write-Host '  and run Install-ForFlagrum.bat again.'
 Write-Host ''
 Read-Host 'Press Enter to close'
