@@ -10,7 +10,7 @@
         xmlns:utilities="clr-namespace:Flagrum.Utilities"
         xmlns:hx="http://helix-toolkit.org/wpf/SharpDX"
         mc:Ignorable="d"
-        Title="Flagrum"
+        Title="ForFlagrum"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize"
         Background="#181512">

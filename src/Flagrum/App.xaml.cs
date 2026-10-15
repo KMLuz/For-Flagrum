@@ -65,7 +65,7 @@ public partial class App
     private async Task StartupAsync(SplashWindow splash, string? fmodPath)
     {
         // Initialise application
-        SetCurrentProcessExplicitAppUserModelID("Flagrum"); // Makes Flagrum stack with pinned taskbar icon
+        SetCurrentProcessExplicitAppUserModelID("ForFlagrum"); // Makes ForFlagrum stack with its own pinned taskbar icon
         SetFileTypeAssociation();
 
         // This fork doesn't check for updates or the original author's latest release, as either would replace
