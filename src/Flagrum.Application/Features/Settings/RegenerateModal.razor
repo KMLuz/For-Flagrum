@@ -8,6 +8,7 @@
 @inject IConfiguration Configuration
 @inject ModManagerServiceBase ModManager
 @inject IFileIndex FileIndex
+@inject IProfileService Profile
 
 <AutosizeModal @ref="Modal" MaxWidth="420px">
     <HeaderView>
@@ -19,7 +20,8 @@
             <span class="block mb-6">
                 @L["Description"]
             </span>
-            @if (ModManager.ModsState.GetAnyActive())
+            @* Forspoken mod archives are skipped by the indexer, so it is safe to index with mods enabled *@
+            @if (ModManager.ModsState.GetAnyActive() && Profile.Current.Type != LuminousGame.Forspoken)
             {
                 <div class="rounded-md bg-accent1-900 border border-accent1-500 text-accent1-300 p-4 mt-4">
                     @L["ActiveModsWarning"]

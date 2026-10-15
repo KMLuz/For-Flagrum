@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Flagrum.Abstractions;
 using Flagrum.Abstractions.Archive;
 using Flagrum.Core.Archive;
 using Flagrum.Core.Utilities;
@@ -217,6 +218,14 @@ public partial class FileIndex
             var relativePath = Path.GetRelativePath(_profile.GameDataDirectory, file)
                 .Replace('\\', '/');
             var extension = Path.GetExtension(file).ToLower();
+
+            // Skip the archives Flagrum builds for Forspoken mods, as they aren't part of the game
+            // Indexing them also caused them to be held open, which stopped mods from being disabled
+            if (_profile.Current.Type == LuminousGame.Forspoken
+                && relativePath.StartsWith("mods/", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
 
             if (extension == ".earc")
             {

@@ -25,7 +25,27 @@ public class AppStateService
         _configuration = configuration;
         _fileIndex = fileIndex;
         FileIndexNode.AppState = this;
+
+        // Re-check the file index whenever it finishes regenerating
+        _fileIndex.OnIsRegeneratingChanged += isRegenerating =>
+        {
+            if (!isRegenerating)
+            {
+                CheckFileIndex();
+            }
+        };
     }
+
+    /// <summary>
+    /// Archives listed in the file index that are missing from the game files or were built by Flagrum.
+    /// Paths are relative to the game data directory.
+    /// </summary>
+    public IReadOnlyList<string> FileIndexProblems { get; private set; } = [];
+
+    /// <summary>
+    /// Raised when <see cref="FileIndexProblems" /> changes.
+    /// </summary>
+    public event Action OnFileIndexProblemsChanged;
 
     public Binmod ActiveMod { get; set; }
     public IList<Binmod> Mods { get; set; } = new List<Binmod>();
@@ -85,23 +105,40 @@ public class AppStateService
                 }
                 else
                 {
-                    if (_profile.Current.Type == LuminousGame.Forspoken)
-                    {
-                        // Preload all earcs to speed up the Asset Explorer
-                        await Task.Run(() =>
-                        {
-                            foreach (var path in ((FileIndex)_fileIndex).Archives
-                                         .Select(archive =>
-                                             Path.Combine(_profile.GameDataDirectory, archive.Value.RelativePath)))
-                            {
-                                ((ProfileService)_profile).OpenArchive(path);
-                            }
-                        });
-                    }
+                    // Archives used to be preloaded here, but nothing used the preloaded archives, and keeping
+                    // them open stopped the mod manager from writing to c000.earc and deleting mod archives
+                    await Task.Run(CheckFileIndex);
                 }
             });
         }
     }
+
+    /// <summary>
+    /// Finds archives in the file index that no longer match the game files, such as after a game update,
+    /// a Steam file verification, or the game path being changed to a different install.
+    /// </summary>
+    public void CheckFileIndex()
+    {
+        var problems = ((FileIndex)_fileIndex).Archives.Values
+            .Select(archive => archive.RelativePath)
+            .Where(relativePath => IsFlagrumModArchive(relativePath)
+                                   || !File.Exists(Path.Combine(_profile.GameDataDirectory, relativePath)))
+            .ToList();
+
+        if (problems.Count > 0 || FileIndexProblems.Count > 0)
+        {
+            FileIndexProblems = problems;
+            OnFileIndexProblemsChanged?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Whether the given archive is one Flagrum built for a Forspoken mod, rather than part of the game.
+    /// </summary>
+    /// <param name="relativePath">Path of the archive relative to the game data directory.</param>
+    public bool IsFlagrumModArchive(string relativePath) =>
+        _profile.Current.Type == LuminousGame.Forspoken
+        && relativePath.Replace('\\', '/').StartsWith("mods/", StringComparison.OrdinalIgnoreCase);
 
     public byte[] GetFileByUri(string uri)
     {
@@ -116,7 +153,7 @@ public class AppStateService
         if (file.Archive == null)
         {
             var absolutePath = Path.Combine(_profile.GameDataDirectory, uri.Replace("data://", ""));
-            return File.ReadAllBytes(absolutePath);
+            return File.Exists(absolutePath) ? File.ReadAllBytes(absolutePath) : [];
         }
         else
         {
@@ -126,7 +163,13 @@ public class AppStateService
                 return [];
             }
 
+            // The file index can be out of date, in which case the user is prompted to regenerate it
             var absolutePath = Path.Combine(_profile.GameDataDirectory, relativePath);
+            if (!File.Exists(absolutePath))
+            {
+                return [];
+            }
+
             using var archive = new EbonyArchive(absolutePath);
             return archive[uri].GetReadableData();
         }
