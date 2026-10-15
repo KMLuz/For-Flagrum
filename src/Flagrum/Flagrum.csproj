@@ -13,6 +13,7 @@
         <FileVersion>$(BaseVersion)</FileVersion> <!-- Version that is displayed in Windows for the application -->
         <SolutionDir>$([System.IO.Path]::GetDirectoryName($(MSBuildProjectDirectory)))</SolutionDir>
         <ApplicationManifest>app.manifest</ApplicationManifest>
+        <RollForward>Major</RollForward> <!-- Use .NET 8 if installed, otherwise fall back to a newer runtime -->
     </PropertyGroup>
 
     <ItemGroup>
