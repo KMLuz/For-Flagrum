@@ -20,8 +20,6 @@ namespace Flagrum;
 
 public partial class App
 {
-    private VersionHelper _versionHelper = null!;
-
     public App()
     {
         CrashHelper.InitializeApplication();
@@ -70,15 +68,8 @@ public partial class App
         SetCurrentProcessExplicitAppUserModelID("Flagrum"); // Makes Flagrum stack with pinned taskbar icon
         SetFileTypeAssociation();
 
-        // Check for updates
-        if (await UpdateHelper.Update())
-        {
-            // Application is restarting, no need to continue initialising
-            return;
-        }
-
-        // Initialise the version helper
-        _versionHelper = new VersionHelper();
+        // This fork doesn't check for updates or the original author's latest release, as either would replace
+        // this version with, or block it in favour of, upstream releases that don't contain the Forspoken changes
 
         // Run all data migrations
         var migrations = Program.Services.GetRequiredService<MigrationRunner>();
@@ -86,15 +77,6 @@ public partial class App
 
         // Ensure WebView2 is installed
         await WebView2Helper.EnsureInstalled();
-
-        // Check the application version
-        if (!_versionHelper.IsCurrent())
-        {
-            MessageBox.Show("This version of Flagrum is no longer supported.",
-                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            Dispatcher.InvokeAsync(() => Current.Shutdown(0));
-            return;
-        }
 
         // Start initialising the asset explorer
         Program.Services.GetRequiredService<AppStateService>().LoadNodes();
