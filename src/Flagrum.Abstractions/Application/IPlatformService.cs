@@ -19,5 +19,4 @@ public interface IPlatformService
     string GetFmodPath();
     void ClearFmodPath();
     void SetClipboardText(string text);
-    void RefreshPatreonButton();
 }

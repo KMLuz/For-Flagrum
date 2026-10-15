@@ -58,18 +58,6 @@
                                Foreground="#E7E5E4" FontSize="14"
                                VerticalAlignment="Center"
                                Padding="0, 5, 15, 8" />
-                        <Image Grid.Column="2"
-                               Source="/patreon.png"
-                               WindowChrome.IsHitTestVisibleInChrome="True"
-                               Height="42"
-                               HorizontalAlignment="Right"
-                               Margin="0, 2, 15, 0"
-                               Cursor="Hand"
-                               Visibility="{Binding ShowPatreonButton, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <Image.InputBindings>
-                                <MouseBinding Gesture="LeftClick" Command="{Binding PatreonLink}" />
-                            </Image.InputBindings>
-                        </Image>
                         <Button Grid.Column="3" WindowChrome.IsHitTestVisibleInChrome="True" Click="Minimize_Click"
                                 Content="&#xE949;" FontFamily="Segoe MDL2 Assets" FontSize="10"
                                 BorderBrush="Transparent"

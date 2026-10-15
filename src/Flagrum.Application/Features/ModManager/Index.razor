@@ -41,12 +41,6 @@
             <Button Icon="add" Text=@Localizer["CreateMod"] CssClass="mr-4"
                     OnClick="@(() => ModCardModal.Open(Guid.Empty))"/>
             <Button Icon="upload" Text=@Localizer["InstallFromZip"] OnClickAsync="Install"/>
-            <div
-                class="row rounded text-sm font-bold text-white pl-1 pr-1.5 pt-1 pb-1 ml-4 cursor-pointer select-none bg-curseforge-dark hover:bg-curseforge transition-colors"
-                @onclick="OpenModSite">
-                <img alt="CurseForge" src="/branding/curseforge-logo.png" style="width: 25px; height: 16px;"/>
-                <span class="ml-1">@Localizer["DownloadMods"]</span>
-            </div>
             @if (Profile.Current.Type == LuminousGame.FFXV)
             {
                 <Button Icon="play_arrow" Text="Launch Game" IsLarge="true" CssClass="ml-6"

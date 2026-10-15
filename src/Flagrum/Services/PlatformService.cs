@@ -118,9 +118,4 @@ public class PlatformService : IPlatformService
     {
         Clipboard.SetText(text);
     }
-
-    public void RefreshPatreonButton()
-    {
-        Main.RefreshPatreonButton();
-    }
 }

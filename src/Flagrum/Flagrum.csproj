@@ -104,9 +104,6 @@
         <Resource Include="flagrum-titlebar.png">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Resource>
-        <Resource Include="patreon.png">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Resource>
         <None Remove="Resources\logo.png"/>
         <Resource Include="Resources\logo.png">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

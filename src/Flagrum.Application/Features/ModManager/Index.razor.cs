@@ -260,18 +260,6 @@ public sealed partial class Index : ModComponentBase
         ReadmeModal.Open();
     }
 
-    private void OpenModSite()
-    {
-        var url = Profile.Current.Type == LuminousGame.FFXV
-            ? "https://www.curseforge.com/final-fantasy-xv"
-            : "https://modworkshop.net/game/forspoken";
-
-        Process.Start(new ProcessStartInfo(url)
-        {
-            UseShellExecute = true
-        });
-    }
-
     public void SetContextMod(IFlagrumProject mod)
     {
         _contextMod = mod;
