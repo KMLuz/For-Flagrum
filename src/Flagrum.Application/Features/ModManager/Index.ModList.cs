@@ -116,7 +116,8 @@ public sealed partial class Index
 
     private List<IFlagrumProject> GetVisibleMods()
     {
-        IEnumerable<IFlagrumProject> mods = ModManager.Projects.Values;
+        // Copy the list first, as installs and deletes change it from background threads
+        IEnumerable<IFlagrumProject> mods = ModManager.Projects.Values.ToList();
 
         var search = SearchText?.Trim();
         if (!string.IsNullOrEmpty(search))
@@ -308,6 +309,10 @@ public sealed partial class Index
                 await Task.Run(async () => await ModManagerService.DeleteMod(mod));
                 Metadata.Remove(mod.Identifier);
                 FskImport.Unlink(mod.Identifier);
+                if (GetContextMod()?.Identifier == mod.Identifier)
+                {
+                    SetContextMod(null);
+                }
                 if (SelectedModId == mod.Identifier)
                 {
                     SelectedModId = null;

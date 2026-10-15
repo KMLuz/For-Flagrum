@@ -17,66 +17,70 @@
              OverrideDefaultCssClass="fixed select-none bg-grey-700 p-0 border-0 shadow-md"
              OverrideDefaultListCssClass="p-0"
              @ref="ContextMenu">
-    @if (ModManagerService.ModsState.GetActive(Parent.GetContextMod().Identifier))
+    @* The context mod is cleared when it is deleted, so there may be nothing to show *@
+    @if (Parent.GetContextMod() != null)
     {
-        <Item OnClick="DisableMod"
+        if (ModManagerService.ModsState.GetActive(Parent.GetContextMod().Identifier))
+        {
+            <Item OnClick="DisableMod"
+                  OverrideDefaultCssClass="text-grey-200 text-sm p-3 hover:bg-grey-600 cursor-pointer transition-colors">
+                <div class="row">
+                    <span class="material-icons mr-3" style="font-size: 0.9rem">block</span>
+                    <span>Disable Mod</span>
+                </div>
+            </Item>
+        }
+        else
+        {
+            <Item OnClick="EnableMod"
+                  OverrideDefaultCssClass="text-grey-200 text-sm p-3 hover:bg-grey-600 cursor-pointer transition-colors">
+                <div class="row">
+                    <span class="material-icons mr-3" style="font-size: 0.9rem">done</span>
+                    <span>Enable Mod</span>
+                </div>
+            </Item>
+        }
+
+        <Item OnClick="TogglePin"
               OverrideDefaultCssClass="text-grey-200 text-sm p-3 hover:bg-grey-600 cursor-pointer transition-colors">
             <div class="row">
-                <span class="material-icons mr-3" style="font-size: 0.9rem">block</span>
-                <span>Disable Mod</span>
+                <span class="material-icons mr-3"
+                      style="font-size: 0.9rem; rotate: @(ModManagerService.ModsState.GetPinned(Parent.GetContextMod().Identifier) ? "90deg" : "45deg")">push_pin</span>
+                <span>@(ModManagerService.ModsState.GetPinned(Parent.GetContextMod().Identifier) ? "Unpin Mod" : "Pin Mod")</span>
+            </div>
+        </Item>
+
+        <Item OnClick="Parent.ShowModCardModal"
+              OverrideDefaultCssClass="text-grey-200 text-sm p-3 hover:bg-grey-600 cursor-pointer transition-colors">
+            <div class="row">
+                <span class="material-icons mr-3" style="font-size: 0.9rem">edit</span>
+                <span>Edit Mod Card</span>
+            </div>
+        </Item>
+
+        <CascadingValue TValue="IModCardContextMenu" Value="this">
+            <PremiumComponent Type="PremiumComponentType.ModCardContextActions"/>
+        </CascadingValue>
+
+        if (IsDebug || !OfficialMods.Guids.Contains(Parent.GetContextMod().Identifier))
+        {
+            <Item OnClick="Export"
+                  OverrideDefaultCssClass="text-grey-200 text-sm p-3 hover:bg-grey-600 cursor-pointer transition-colors">
+                <div class="row">
+                    <span class="material-icons mr-3" style="font-size: 0.9rem">file_download</span>
+                    <span>Export...</span>
+                </div>
+            </Item>
+        }
+
+        <Item OnClick="DeleteMod"
+              OverrideDefaultCssClass="text-grey-200 text-sm p-3 bg-error hover:bg-error-highlight cursor-pointer transition-colors">
+            <div class="row">
+                <span class="material-icons mr-3" style="font-size: 0.9rem">delete</span>
+                <span>Delete Mod</span>
             </div>
         </Item>
     }
-    else
-    {
-        <Item OnClick="EnableMod"
-              OverrideDefaultCssClass="text-grey-200 text-sm p-3 hover:bg-grey-600 cursor-pointer transition-colors">
-            <div class="row">
-                <span class="material-icons mr-3" style="font-size: 0.9rem">done</span>
-                <span>Enable Mod</span>
-            </div>
-        </Item>
-    }
-
-    <Item OnClick="TogglePin"
-          OverrideDefaultCssClass="text-grey-200 text-sm p-3 hover:bg-grey-600 cursor-pointer transition-colors">
-        <div class="row">
-            <span class="material-icons mr-3"
-                  style="font-size: 0.9rem; rotate: @(ModManagerService.ModsState.GetPinned(Parent.GetContextMod().Identifier) ? "90deg" : "45deg")">push_pin</span>
-            <span>@(ModManagerService.ModsState.GetPinned(Parent.GetContextMod().Identifier) ? "Unpin Mod" : "Pin Mod")</span>
-        </div>
-    </Item>
-
-    <Item OnClick="Parent.ShowModCardModal"
-          OverrideDefaultCssClass="text-grey-200 text-sm p-3 hover:bg-grey-600 cursor-pointer transition-colors">
-        <div class="row">
-            <span class="material-icons mr-3" style="font-size: 0.9rem">edit</span>
-            <span>Edit Mod Card</span>
-        </div>
-    </Item>
-
-    <CascadingValue TValue="IModCardContextMenu" Value="this">
-        <PremiumComponent Type="PremiumComponentType.ModCardContextActions"/>
-    </CascadingValue>
-
-    @if (IsDebug || !OfficialMods.Guids.Contains(Parent.GetContextMod().Identifier))
-    {
-        <Item OnClick="Export"
-              OverrideDefaultCssClass="text-grey-200 text-sm p-3 hover:bg-grey-600 cursor-pointer transition-colors">
-            <div class="row">
-                <span class="material-icons mr-3" style="font-size: 0.9rem">file_download</span>
-                <span>Export...</span>
-            </div>
-        </Item>
-    }
-
-    <Item OnClick="DeleteMod"
-          OverrideDefaultCssClass="text-grey-200 text-sm p-3 bg-error hover:bg-error-highlight cursor-pointer transition-colors">
-        <div class="row">
-            <span class="material-icons mr-3" style="font-size: 0.9rem">delete</span>
-            <span>Delete Mod</span>
-        </div>
-    </Item>
 </ContextMenu>
 
 @code

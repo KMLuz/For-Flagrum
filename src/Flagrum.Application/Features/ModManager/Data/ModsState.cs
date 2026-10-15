@@ -41,7 +41,9 @@ public partial class ModsState
 
     public bool GetActive(Guid modId)
     {
-        return ModStates[modId].IsActive;
+        // A mod that is being deleted (or never had state) is treated as disabled rather than throwing,
+        // as the UI can still ask about it while the deletion finishes
+        return ModStates.TryGetValue(modId, out var state) && state.IsActive;
     }
 
     public void SetActive(Guid modId, bool isActive)
@@ -68,7 +70,7 @@ public partial class ModsState
 
     public bool GetPinned(Guid modId)
     {
-        return ModStates[modId].IsPinned;
+        return ModStates.TryGetValue(modId, out var state) && state.IsPinned;
     }
 
     public void SetPinned(Guid modId, bool isPinned)

@@ -75,7 +75,8 @@
             }
             <div class="flex-grow overflow-auto" style="min-height: 0;">
                 <LoadingView IsLoading="IsLoading" Text="@LoadingText" CssClass="h-full">
-                    @{
+                    @if (!IsLoading)
+                    {
                         var items = GetVisibleMods();
 
                         <div class="grid items-center px-5 py-2 text-sm text-grey-500 border-b border-dark-600 bg-dark select-none sticky top-0 z-40"
