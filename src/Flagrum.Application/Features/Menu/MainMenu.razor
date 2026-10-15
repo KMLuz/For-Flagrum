@@ -14,6 +14,11 @@
         <MenuItem Icon="apps" Text="@L["ModManager"]" DefaultActive="true" Uri="/"/>
         <MenuItem Icon="videogame_asset" Text="@L["AssetExplorer"]" Uri="/assets"/>
 
+        @if (Profile.Current.Type == LuminousGame.Forspoken)
+        {
+            <ForspokenLaunchButton/>
+        }
+
         @if (Profile.Current.Type == LuminousGame.FFXV)
         {
             <MenuItem Icon="steam" Text=@L["WorkshopMods"] Uri="/mod"/>
@@ -26,8 +31,6 @@
 
         <div class="flex-grow"></div>
 
-        <MenuItem Icon="menu_book" Text="@L["Wiki"]" Uri="@L["WikiUrl"]"/>
-        <MenuItem Icon="bug_report" Text="Report a Bug" Uri="/bug"/>
         <MenuItem Icon="info" Text="@L["About"]" Uri="/about"/>
         <MenuItem Icon="settings" Text="@AppLocalizer["Settings"]" Uri="/settings"/>
 

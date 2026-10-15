@@ -1,0 +1,126 @@
+@using System.ComponentModel
+@using System.Diagnostics
+@using System.IO
+@using System.Threading
+@implements IDisposable
+@inject IProfileService Profile
+@inject IAlertService Alert
+@inject ILogger<ForspokenLaunchButton> Logger
+
+<div class="py-3 pl-5 pr-4 flex flex-col select-none transition-colors @(State == LaunchState.Ready ? "cursor-pointer hover:bg-grey-700" : "cursor-default")"
+     title="@(State == LaunchState.Running ? "Forspoken is running" : "Launch Forspoken")"
+     @onclick="Launch">
+    <img alt="Forspoken" src="/branding/forspoken-logo.png" style="width: 150px;"/>
+    @switch (State)
+    {
+        case LaunchState.Running:
+            <div class="row mt-1 text-sm text-green-400">
+                <span class="material-icons mr-1" style="font-size: 0.6rem;">circle</span>
+                <span>Running</span>
+            </div>
+            break;
+        case LaunchState.Starting:
+            <div class="row mt-1 text-sm text-grey-400">
+                <span class="material-icons mr-1" style="font-size: 1rem;">hourglass_empty</span>
+                <span>Starting</span>
+            </div>
+            break;
+        default:
+            <div class="row mt-1 text-sm text-accent1-200">
+                <span class="material-icons mr-1" style="font-size: 1rem;">play_arrow</span>
+                <span>Play</span>
+            </div>
+            break;
+    }
+</div>
+
+@code
+{
+    private enum LaunchState
+    {
+        Ready,
+        Starting,
+        Running
+    }
+
+    /// <summary>
+    /// How long to show "Starting" after launching before going back to "Play" if the game never appears.
+    /// </summary>
+    private static readonly TimeSpan StartingTimeout = TimeSpan.FromSeconds(60);
+
+    private Timer _timer;
+    private DateTime _launchedAt;
+
+    private LaunchState State { get; set; }
+
+    protected override void OnInitialized()
+    {
+        State = Profile.IsGameRunning() ? LaunchState.Running : LaunchState.Ready;
+
+        // Poll for the game process so the button reflects the game being opened or closed outside of Flagrum
+        // Runs on the UI thread so the state is never changed by two threads at once
+        _timer = new Timer(_ => InvokeAsync(UpdateState), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+    }
+
+    private void UpdateState()
+    {
+        LaunchState newState;
+        if (Profile.IsGameRunning())
+        {
+            newState = LaunchState.Running;
+        }
+        else if (State == LaunchState.Starting && DateTime.Now - _launchedAt < StartingTimeout)
+        {
+            newState = LaunchState.Starting;
+        }
+        else
+        {
+            newState = LaunchState.Ready;
+        }
+
+        if (newState != State)
+        {
+            State = newState;
+            StateHasChanged();
+        }
+    }
+
+    private void Launch()
+    {
+        if (State != LaunchState.Ready)
+        {
+            return;
+        }
+
+        var gamePath = Profile.Current.GamePath;
+        if (string.IsNullOrWhiteSpace(gamePath) || !File.Exists(gamePath))
+        {
+            Alert.Open("Error", "Game Not Found",
+                "Flagrum couldn't find Forspoken. Please check that the game path in Settings points at FORSPOKEN.exe.");
+            return;
+        }
+
+        try
+        {
+            // Launch the same way as double-clicking the executable, Steam takes over from there if needed
+            Process.Start(new ProcessStartInfo(gamePath)
+            {
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetDirectoryName(gamePath)!
+            })?.Dispose();
+
+            _launchedAt = DateTime.Now;
+            State = LaunchState.Starting;
+        }
+        catch (Win32Exception exception)
+        {
+            Logger.LogError(exception, "Failed to launch Forspoken");
+            Alert.Open("Error", "Couldn't Start Forspoken", $"Windows wouldn't start the game: {exception.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}
