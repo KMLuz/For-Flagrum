@@ -11,3 +11,6 @@ src/Flagrum.Core/Graphics/Textures/Scarlet/* linguist-vendored
 .idea/* linguist-generated
 .run/* linguist-generated
 src/Flagrum/wwwroot/app.css linguist-generated
+# Windows scripts need Windows line endings
+*.bat text eol=crlf
+*.ps1 text eol=crlf
