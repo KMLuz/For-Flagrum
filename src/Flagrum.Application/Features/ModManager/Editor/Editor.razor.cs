@@ -203,6 +203,14 @@ public partial class Editor
         HasChanged = true;
     }
 
+    /// <inheritdoc />
+    protected override void OnModOperationFailed()
+    {
+        // Stay on the editor so the user can try again once the problem is fixed
+        IsLoading = false;
+        StateHasChanged();
+    }
+
     private void Save()
     {
         if (Profile.IsGameRunning())

@@ -99,40 +99,49 @@
             {
                 await InvokeAsync(() => Parent.SetLoading(true, "Enabling Mod"));
 
-                var mod = Parent.GetContextMod();
-                var deadFiles = ModManagerService.Projects[mod.Identifier].GetDeadFiles();
-                if (deadFiles.Any())
+                try
                 {
-                    var message = deadFiles.Aggregate("The mod could not be built as the following files were missing:<ul class='mt-4'>",
-                        (current, file) => current + $"<li>{file}</li>");
-                    await InvokeAsync(() => Parent.Alert.Open("Error", "Missing Files", message + "</ul>", null, 400, 300, true));
-                    await InvokeAsync(() => Parent.SetLoading(false));
-                    return;
+                    await EnableContextMod();
                 }
-
-                if (EarlyAccessMods.GuidMap.ContainsKey(mod.Identifier) && !Authentication.IsAuthenticated)
+                catch (Exception exception)
                 {
-                    await InvokeAsync(() => Parent.Alert.Open("Error", "Flagrum+ Required",
-                        "This mod requires Flagrum+ to run. Please ensure you are subscribed to the Flagrum" +
-                        " Patreon and have linked your Patreon account in the Settings tab.",
-                        null));
-                    await InvokeAsync(() => Parent.SetLoading(false));
-                    return;
+                    Parent.ShowModOperationError(exception);
                 }
-
-                if (!Parent.CheckReferencesValid(mod.Identifier))
-                {
-                    await InvokeAsync(() => Parent.SetLoading(false));
-                    return;
-                }
-
-                var taskId = await Parent.CheckConflicts(mod.Identifier, async () => await ModManagerService.EnableMod(mod));
-                await Parent.TaskCompletionSources[taskId].Task;
-                Parent.TaskCompletionSources.Remove(taskId);
 
                 await InvokeAsync(() => Parent.SetLoading(false));
             });
         });
+    }
+
+    private async Task EnableContextMod()
+    {
+        var mod = Parent.GetContextMod();
+        var deadFiles = ModManagerService.Projects[mod.Identifier].GetDeadFiles();
+        if (deadFiles.Any())
+        {
+            var message = deadFiles.Aggregate("The mod could not be built as the following files were missing:<ul class='mt-4'>",
+                (current, file) => current + $"<li>{file}</li>");
+            await InvokeAsync(() => Parent.Alert.Open("Error", "Missing Files", message + "</ul>", null, 400, 300, true));
+            return;
+        }
+
+        if (EarlyAccessMods.GuidMap.ContainsKey(mod.Identifier) && !Authentication.IsAuthenticated)
+        {
+            await InvokeAsync(() => Parent.Alert.Open("Error", "Flagrum+ Required",
+                "This mod requires Flagrum+ to run. Please ensure you are subscribed to the Flagrum" +
+                " Patreon and have linked your Patreon account in the Settings tab.",
+                null));
+            return;
+        }
+
+        if (!Parent.CheckReferencesValid(mod.Identifier))
+        {
+            return;
+        }
+
+        var taskId = await Parent.CheckConflicts(mod.Identifier, async () => await ModManagerService.EnableMod(mod));
+        await Parent.TaskCompletionSources[taskId].Task;
+        Parent.TaskCompletionSources.Remove(taskId);
     }
 
     private void DisableMod()
@@ -148,8 +157,17 @@
             await Task.Run(async () =>
             {
                 await InvokeAsync(() => Parent.SetLoading(true, "DisablingMod"));
-                var mod = Parent.GetContextMod();
-                ModManagerService.DisableMod(mod);
+
+                try
+                {
+                    var mod = Parent.GetContextMod();
+                    await ModManagerService.DisableMod(mod);
+                }
+                catch (Exception exception)
+                {
+                    Parent.ShowModOperationError(exception);
+                }
+
                 await InvokeAsync(() => Parent.SetLoading(false));
             });
         });
@@ -184,7 +202,14 @@
             Parent.IsLoading = true;
             Parent.CallStateHasChanged();
 
-            await Task.Run(async () => await ModManagerService.DeleteMod(mod));
+            try
+            {
+                await Task.Run(async () => await ModManagerService.DeleteMod(mod));
+            }
+            catch (Exception exception)
+            {
+                Parent.ShowModOperationError(exception);
+            }
 
             Parent.IsLoading = false;
             Parent.CallStateHasChanged();

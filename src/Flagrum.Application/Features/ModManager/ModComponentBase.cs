@@ -10,6 +10,7 @@ using Flagrum.Application.Features.ModManager.Services;
 using Flagrum.Application.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Logging;
 
 namespace Flagrum.Application.Features.ModManager;
 
@@ -24,6 +25,8 @@ public class ModComponentBase : ComponentBase
     [Inject] protected IProfileService Profile { get; set; }
 
     [Inject] protected AppStateService AppState { get; set; }
+
+    [Inject] private ILogger<ModComponentBase> Logger { get; set; }
 
     [Parameter] public IFlagrumProject Mod { get; set; }
 
@@ -48,6 +51,37 @@ public class ModComponentBase : ComponentBase
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Logs a failed mod operation and tells the user what went wrong, instead of letting Flagrum crash.
+    /// </summary>
+    public void ShowModOperationError(Exception exception)
+    {
+        Logger.LogError(exception, "Mod operation failed");
+        var (heading, message) = ModOperationError.Describe(exception);
+        InvokeAsync(() => Alert.Open("Error", heading, message, null, 500, 340));
+    }
+
+    /// <summary>
+    /// Called on the UI thread after a mod operation run through <see cref="CheckConflicts(Guid, Func{Task}, Func{Task})" />
+    /// has failed, so the component can reset any loading state.
+    /// </summary>
+    protected virtual void OnModOperationFailed() { }
+
+    private async Task<bool> RunModOperation(Func<Task> operation)
+    {
+        try
+        {
+            await operation();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            ShowModOperationError(exception);
+            await InvokeAsync(OnModOperationFailed);
+            return false;
+        }
     }
 
     public Task<Guid> CheckConflicts(Guid modId, Func<Task> onYes, Func<Task> onNo = null)
@@ -93,20 +127,24 @@ public class ModComponentBase : ComponentBase
             Prompt.NoText = "No";
             Prompt.OnYes = () => Task.Run(async () =>
             {
-                foreach (var conflict in conflicts)
+                var succeeded = await RunModOperation(async () =>
                 {
-                    ModManagerService.DisableMod(conflict.Mod);
-                }
+                    foreach (var conflict in conflicts)
+                    {
+                        await ModManagerService.DisableMod(conflict.Mod);
+                    }
 
-                await onYes();
-                taskCompletionSource.SetResult(true);
+                    await onYes();
+                });
+
+                taskCompletionSource.SetResult(succeeded);
             });
 
             Prompt.OnNo = async () =>
             {
                 if (onNo != null)
                 {
-                    await onNo();
+                    await RunModOperation(onNo);
                 }
 
                 taskCompletionSource.SetResult(false);
@@ -116,8 +154,7 @@ public class ModComponentBase : ComponentBase
         }
         else
         {
-            await onYes();
-            taskCompletionSource.SetResult(true);
+            taskCompletionSource.SetResult(await RunModOperation(onYes));
         }
 
         return taskId;
