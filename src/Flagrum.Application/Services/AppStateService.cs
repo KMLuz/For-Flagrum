@@ -140,7 +140,15 @@ public class AppStateService
         _profile.Current.Type == LuminousGame.Forspoken
         && relativePath.Replace('\\', '/').StartsWith("mods/", StringComparison.OrdinalIgnoreCase);
 
-    public byte[] GetFileByUri(string uri)
+    /// <summary>
+    /// Reads a game file by its URI.
+    /// </summary>
+    /// <param name="uri">URI of the file to read.</param>
+    /// <param name="archives">
+    /// Optional cache of open archives to read from, for callers reading many files in a row.
+    /// The caller is responsible for disposing it. Without it, the archive is opened and closed for each file.
+    /// </param>
+    public byte[] GetFileByUri(string uri, EbonyArchiveManager archives = null)
     {
         uri = uri.ToLower();
 
@@ -168,6 +176,11 @@ public class AppStateService
             if (!File.Exists(absolutePath))
             {
                 return [];
+            }
+
+            if (archives != null)
+            {
+                return archives.Open(absolutePath)[uri].GetReadableData();
             }
 
             using var archive = new EbonyArchive(absolutePath);

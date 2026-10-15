@@ -91,7 +91,7 @@
             }
 
             PlatformService.Set3DViewportVisibility(true);
-            LodLevels = PlatformService.ChangeModel(Item, Parent.CurrentView, 0);
+            LodLevels = await PlatformService.ChangeModelAsync(Item, Parent.CurrentView, 0);
 
             _lastItem = Item;
             _isRendered = true;
@@ -112,7 +112,7 @@
 
             PlatformService.Set3DViewportVisibility(false);
 
-            await Task.Run(() => { return InvokeAsync(() => { LodLevels = PlatformService.ChangeModel(Item, Parent.CurrentView, 0); }); });
+            LodLevels = await PlatformService.ChangeModelAsync(Item, Parent.CurrentView, 0);
 
             PlatformService.Set3DViewportVisibility(true);
 
@@ -134,7 +134,7 @@
 
         PlatformService.Set3DViewportVisibility(false);
 
-        await Task.Run(() => { return InvokeAsync(() => { PlatformService.ChangeModel(Item, Parent.CurrentView, lodLevel); }); });
+        await PlatformService.ChangeModelAsync(Item, Parent.CurrentView, lodLevel);
 
         PlatformService.Set3DViewportVisibility(true);
 

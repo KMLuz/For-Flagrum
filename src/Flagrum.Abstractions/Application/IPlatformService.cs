@@ -11,7 +11,7 @@ public interface IPlatformService
     void Restart();
     void Resize3DViewport(int left, int top, int width, int height);
     void Set3DViewportVisibility(bool isVisible);
-    int ChangeModel(IAssetExplorerNode gmdlNode, AssetExplorerView view, int lodLevel);
+    Task<int> ChangeModelAsync(IAssetExplorerNode gmdlNode, AssetExplorerView view, int lodLevel);
 
     void Update3DViewportBindings(ModifierKeys rotateModifierKey, MouseAction rotateMouseAction,
         ModifierKeys panModifierKey, MouseAction panMouseAction);

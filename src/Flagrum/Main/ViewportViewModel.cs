@@ -21,6 +21,7 @@ using Camera = HelixToolkit.Wpf.SharpDX.Camera;
 using Geometry3D = HelixToolkit.SharpDX.Core.Geometry3D;
 using Material = HelixToolkit.Wpf.SharpDX.Material;
 using PerspectiveCamera = HelixToolkit.Wpf.SharpDX.PerspectiveCamera;
+using Microsoft.Extensions.Logging;
 
 namespace Flagrum.Main;
 
@@ -50,7 +51,8 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         IProfileService profile,
         IPlatformService platformService,
         IConfiguration configuration,
-        TextureConverter textureConverter)
+        TextureConverter textureConverter,
+        ILogger<ViewportHelper> viewportLogger)
     {
         ((PlatformService)platformService).Viewport = this;
 
@@ -81,7 +83,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         var viewportPanMouseAction = configuration.Get<MouseAction>(StateKey.ViewportPanMouseAction);
         _viewportPanGesture = new MouseGesture(viewportPanMouseAction, viewportPanModifierKey);
 
-        ViewportHelper = new ViewportHelper(appState, configuration, textureConverter, this);
+        ViewportHelper = new ViewportHelper(appState, configuration, textureConverter, this, viewportLogger);
         EffectsManager = new DefaultEffectsManager();
         Camera = new PerspectiveCamera
         {

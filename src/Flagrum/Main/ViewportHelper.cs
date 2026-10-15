@@ -4,10 +4,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using Flagrum.Abstractions;
 using Flagrum.Abstractions.AssetExplorer;
+using Flagrum.Core.Archive;
 using Flagrum.Core.Graphics.Materials;
 using Flagrum.Core.Graphics.Models;
 using Flagrum.Generators;
@@ -19,6 +21,7 @@ using HelixToolkit.SharpDX.Core.Assimp;
 using HelixToolkit.SharpDX.Core.Model.Scene;
 using HelixToolkit.Wpf.SharpDX;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SharpDX;
 
 namespace Flagrum.Main;
@@ -30,16 +33,79 @@ public partial class ViewportHelper
     [Inject] private readonly IConfiguration _configuration;
     [Inject] private readonly TextureConverter _textureConverter;
     [Inject] private readonly ViewportViewModel _viewModel;
+    [Inject] private readonly ILogger<ViewportHelper> _logger;
 
-    private ModelViewerTextureFidelity _fidelity;
+    /// <summary>
+    /// Most textures kept converted between model loads. Several outfits share the same skin textures,
+    /// and switching LOD reloads the same model, so this saves converting them again.
+    /// </summary>
+    private const int MaxCachedTextures = 40;
 
-    public int ChangeModel(IAssetExplorerNode gmdlNode, AssetExplorerView view, int lodLevel)
+    private readonly ConcurrentDictionary<string, Lazy<byte[]?>> _textureImageCache = new();
+    private int _latestRequest;
+
+    /// <summary>
+    /// Loads a model into the 3D viewport.
+    /// </summary>
+    /// <returns>The number of LODs the model has, or 0 if there was nothing to show.</returns>
+    /// <remarks>
+    /// The model is read and its textures converted on background threads, so Flagrum stays responsive
+    /// while it loads. Only adding the finished meshes to the viewport happens on the UI thread.
+    /// </remarks>
+    public async Task<int> ChangeModelAsync(IAssetExplorerNode gmdlNode, AssetExplorerView view, int lodLevel)
     {
+        var request = Interlocked.Increment(ref _latestRequest);
         _viewModel.Viewer!.Reset();
+
+        BuiltModel? result;
+        try
+        {
+            result = await Task.Run(() => BuildModel(gmdlNode, view, lodLevel));
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Failed to load model {Path}", gmdlNode.Path);
+            if (request == _latestRequest)
+            {
+                MessageBox.Show($"Flagrum couldn't show this model:\n\n{exception.Message}",
+                    "Model Preview", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            return 0;
+        }
+
+        // Another model was requested while this one was loading, so don't overwrite it
+        if (request != _latestRequest)
+        {
+            return result?.LodLevels ?? 0;
+        }
+
+        if (result == null)
+        {
+            MessageBox.Show("This model doesn't have a corresponding gpubin file, so there is nothing to show.",
+                "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return 0;
+        }
 
         var modelGroup = new SceneNodeGroupModel3D();
         var scene = new HelixToolkitScene(new GroupNode());
         modelGroup.AddNode(scene.Root);
+
+        foreach (var node in result.Nodes)
+        {
+            modelGroup.AddNode(node);
+        }
+
+        _viewModel.ModelGroup = modelGroup;
+        _viewModel.Viewer.ZoomExtents(0);
+
+        return result.LodLevels;
+    }
+
+    private record BuiltModel(List<SceneNode> Nodes, int LodLevels);
+
+    private BuiltModel? BuildModel(IAssetExplorerNode gmdlNode, AssetExplorerView view, int lodLevel)
+    {
         var modelBag = new ConcurrentBag<SceneNode>();
 
         // Read the model
@@ -55,9 +121,7 @@ public partial class ViewportHelper
 
         if (!gpubinUris.Any())
         {
-            MessageBox.Show("This model doesn't have a corresponding gpubin file, so there is nothing to show.",
-                "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return 0;
+            return null;
         }
 
         // Find the gpubin locations
@@ -73,7 +137,7 @@ public partial class ViewportHelper
 
         // Get the texture fidelity settings
         var fidelityInt = _configuration.Get<int>(StateKey.ViewportTextureFidelity);
-        _fidelity = fidelityInt == -1 ? ModelViewerTextureFidelity.Low : (ModelViewerTextureFidelity)fidelityInt;
+        var fidelity = fidelityInt == -1 ? ModelViewerTextureFidelity.Low : (ModelViewerTextureFidelity)fidelityInt;
 
         // Calculate paths
         var gpubinUri = gpubinUris.First();
@@ -83,14 +147,38 @@ public partial class ViewportHelper
             RootDirectory = string.Join('\\', gmdlNode.Path.Split('\\')[..^1])
         };
 
+        object? contextObject = view == AssetExplorerView.FileSystem ? modelContext : null;
+
+        // Many meshes share materials and textures, so only read and convert each one once per load.
+        // Archives are kept open for the duration of the load instead of being reopened for every file,
+        // and are all closed again before returning so the mod manager can still write to them.
+        using var archives = new EbonyArchiveManager();
+        var materials = new ConcurrentDictionary<string, Lazy<GameMaterial?>>();
+        var textures = new ConcurrentDictionary<string, Lazy<TextureModel?>>();
+
+        GameMaterial? GetMaterial(string uri) => materials.GetOrAdd(uri, _ => new Lazy<GameMaterial?>(() =>
+        {
+            var data = GetDataByUri(uri, contextObject, view, fidelity, archives);
+            if (data == null)
+            {
+                return null;
+            }
+
+            var material = new GameMaterial();
+            material.Read(data);
+            return material;
+        })).Value;
+
+        TextureModel? GetTexture(string uri) => textures.GetOrAdd(uri, _ => new Lazy<TextureModel?>(() =>
+        {
+            var image = GetTextureImage(uri, contextObject, view, fidelity, archives);
+            return image == null ? null : TextureModel.Create(new MemoryStream(image));
+        })).Value;
+
         Parallel.ForEach(model.MeshObjects, meshObject =>
         {
             Parallel.ForEach(meshObject.Meshes.Where(m => m.LodLevel == lodLevel && (m.Flags & 67108864) == 0), mesh =>
             {
-                object? contextObject = view == AssetExplorerView.FileSystem
-                    ? modelContext
-                    : null;
-
                 var builder = new MeshBuilder();
                 var faceIndices = new List<int>();
 
@@ -142,7 +230,7 @@ public partial class ViewportHelper
                     AlbedoColor = Color4.White
                 };
 
-                if (_fidelity != ModelViewerTextureFidelity.None)
+                if (fidelity != ModelViewerTextureFidelity.None)
                 {
                     var materialUri = model.Dependencies
                         .FirstOrDefault(d => d.Key == mesh.MaterialHash.ToString())
@@ -150,14 +238,11 @@ public partial class ViewportHelper
 
                     if (materialUri != null)
                     {
-                        var materialData = GetDataByUri(materialUri, contextObject, view);
-                        if (materialData == null)
+                        var gameMaterial = GetMaterial(materialUri);
+                        if (gameMaterial == null)
                         {
                             return;
                         }
-
-                        var gameMaterial = new GameMaterial();
-                        gameMaterial.Read(materialData);
 
                         var diffuseUri = gameMaterial.Textures
                             .FirstOrDefault(t =>
@@ -171,44 +256,12 @@ public partial class ViewportHelper
 
                         if (diffuseUri != null && normalUri != null)
                         {
-                            var diffuse = GetDataByUri(diffuseUri, contextObject, view);
-                            var normal = GetDataByUri(normalUri, contextObject, view);
-
                             TextureModel? albedoMap = null;
                             TextureModel? normalMap = null;
 
-                            Parallel.Invoke(() =>
-                                {
-                                    if (diffuse is {Length: > 0})
-                                    {
-                                        var tag = Encoding.UTF8.GetString(diffuse[..8]);
-
-                                        if (tag == "SEDBbtex" || tag.StartsWith("BTEX"))
-                                        {
-                                            diffuse = _textureConverter.ToPng(diffuse);
-                                        }
-
-                                        var diffuseStream = new MemoryStream(diffuse);
-                                        diffuseStream.Seek(0, SeekOrigin.Begin);
-                                        albedoMap = TextureModel.Create(diffuseStream);
-                                    }
-                                },
-                                () =>
-                                {
-                                    if (normal is {Length: > 0})
-                                    {
-                                        var tag = Encoding.UTF8.GetString(normal[..8]);
-
-                                        if (tag == "SEDBbtex" || tag.StartsWith("BTEX"))
-                                        {
-                                            normal = _textureConverter.ToPng(normal);
-                                        }
-
-                                        var normalStream = new MemoryStream(normal);
-                                        normalStream.Seek(0, SeekOrigin.Begin);
-                                        normalMap = TextureModel.Create(normalStream);
-                                    }
-                                });
+                            Parallel.Invoke(
+                                () => albedoMap = GetTexture(diffuseUri),
+                                () => normalMap = GetTexture(normalUri));
 
                             if (albedoMap != null)
                             {
@@ -231,45 +284,79 @@ public partial class ViewportHelper
             });
         });
 
-        foreach (var node in modelBag)
-        {
-            modelGroup.AddNode(node);
-        }
-
-        _viewModel.ModelGroup = modelGroup;
-        _viewModel.Viewer.ZoomExtents(0);
-
-        return model.LodLevels;
+        return new BuiltModel(modelBag.ToList(), model.LodLevels);
     }
 
-    private byte[]? GetDataByUri(string uri, object? context, AssetExplorerView view)
+    /// <summary>
+    /// Gets a texture as an image the viewport can display, converting it from the game's format if needed.
+    /// </summary>
+    private byte[]? GetTextureImage(string uri, object? context, AssetExplorerView view,
+        ModelViewerTextureFidelity fidelity, EbonyArchiveManager archives)
+    {
+        byte[]? Convert()
+        {
+            try
+            {
+                var data = GetDataByUri(uri, context, view, fidelity, archives);
+                if (data is not {Length: > 0})
+                {
+                    return null;
+                }
+
+                var tag = Encoding.UTF8.GetString(data[..8]);
+                return tag == "SEDBbtex" || tag.StartsWith("BTEX") ? _textureConverter.ToPng(data) : data;
+            }
+            catch (Exception exception)
+            {
+                // Show the mesh untextured rather than failing the whole model
+                _logger.LogWarning(exception, "Failed to load texture {Uri} for the model preview", uri);
+                return null;
+            }
+        }
+
+        // Only game files are kept between loads, files on disk may have been re-exported since
+        if (view != AssetExplorerView.GameView)
+        {
+            return Convert();
+        }
+
+        if (_textureImageCache.Count > MaxCachedTextures)
+        {
+            _textureImageCache.Clear();
+        }
+
+        return _textureImageCache.GetOrAdd($"{fidelity}|{uri}", _ => new Lazy<byte[]?>(Convert)).Value;
+    }
+
+    private byte[]? GetDataByUri(string uri, object? context, AssetExplorerView view,
+        ModelViewerTextureFidelity fidelity, EbonyArchiveManager archives)
     {
         if (view == AssetExplorerView.GameView)
         {
             var high = uri.Insert(uri.LastIndexOf('.'), "_$h");
             var highest = high.Replace("/sourceimages/", "/highimages/");
 
-            if (_fidelity >= ModelViewerTextureFidelity.Highest)
+            if (fidelity >= ModelViewerTextureFidelity.Highest)
             {
-                var data = _appState.GetFileByUri(highest);
+                var data = _appState.GetFileByUri(highest, archives);
                 if (data.Length > 0)
                 {
                     return data;
                 }
             }
 
-            if (_fidelity >= ModelViewerTextureFidelity.High)
+            if (fidelity >= ModelViewerTextureFidelity.High)
             {
-                var data = _appState.GetFileByUri(high);
+                var data = _appState.GetFileByUri(high, archives);
                 if (data.Length > 0)
                 {
                     return data;
                 }
             }
 
-            if (_fidelity >= ModelViewerTextureFidelity.Low)
+            if (fidelity >= ModelViewerTextureFidelity.Low)
             {
-                var data = _appState.GetFileByUri(uri);
+                var data = _appState.GetFileByUri(uri, archives);
                 if (data.Length > 0)
                 {
                     return data;
@@ -289,7 +376,7 @@ public partial class ViewportHelper
 
         var path = uri.EndsWith(".gmtl")
             ? UriToRelativePath(modelContext)
-            : ResolveTexturePath(modelContext);
+            : ResolveTexturePath(modelContext, fidelity);
 
         return path == null || !File.Exists(path) ? null : File.ReadAllBytes(path);
     }
@@ -354,13 +441,13 @@ public partial class ViewportHelper
         return string.Join('/', tokens).Replace("data/", "data://");
     }
 
-    private string? ResolveTexturePath(FileSystemModelContext context)
+    private string? ResolveTexturePath(FileSystemModelContext context, ModelViewerTextureFidelity fidelity)
     {
         var extensions = new[] {"dds", "tga", "png", "btex"};
         var high = context.Uri.Insert(context.Uri.LastIndexOf('.'), "_$h");
         var highest = high.Replace("/sourceimages/", "/highimages/");
 
-        if (_fidelity >= ModelViewerTextureFidelity.Highest)
+        if (fidelity >= ModelViewerTextureFidelity.Highest)
         {
             var highestPath = UriToRelativePath(new FileSystemModelContext
             {
@@ -384,7 +471,7 @@ public partial class ViewportHelper
             }
         }
 
-        if (_fidelity >= ModelViewerTextureFidelity.High)
+        if (fidelity >= ModelViewerTextureFidelity.High)
         {
             var highPath = UriToRelativePath(new FileSystemModelContext
             {
@@ -408,7 +495,7 @@ public partial class ViewportHelper
             }
         }
 
-        if (_fidelity >= ModelViewerTextureFidelity.Low)
+        if (fidelity >= ModelViewerTextureFidelity.Low)
         {
             var lowPath = UriToRelativePath(new FileSystemModelContext
             {

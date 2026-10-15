@@ -104,8 +104,8 @@ public class PlatformService : IPlatformService
         Viewport.IsViewportVisible = isVisible;
     }
 
-    public int ChangeModel(IAssetExplorerNode gmdlNode, AssetExplorerView view, int lodLevel) =>
-        Viewport.ViewportHelper!.ChangeModel(gmdlNode, view, lodLevel);
+    public Task<int> ChangeModelAsync(IAssetExplorerNode gmdlNode, AssetExplorerView view, int lodLevel) =>
+        Viewport.ViewportHelper!.ChangeModelAsync(gmdlNode, view, lodLevel);
 
     public string? GetFmodPath() => Main.FmodPath;
 
