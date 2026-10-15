@@ -233,21 +233,50 @@ public class ProfileService : IProfileService
 
             if (directory != null && fileName != null)
             {
+                Process[] processes;
                 try
                 {
-                    return Process.GetProcessesByName(fileName)
-                        .Any(p => p.MainModule?.FileName
-                                      .StartsWith(directory, StringComparison.OrdinalIgnoreCase) == true);
+                    processes = Process.GetProcessesByName(fileName);
                 }
                 catch
                 {
                     // Failure should not prevent Flagrum from doing what it needs to, so assume the game is closed
+                    // The mod manager still checks that the game files aren't in use before writing to them
                     return false;
+                }
+
+                try
+                {
+                    return processes.Any(p => IsProcessFromGameDirectory(p, directory));
+                }
+                finally
+                {
+                    foreach (var process in processes)
+                    {
+                        process.Dispose();
+                    }
                 }
             }
         }
 
         return false;
+    }
+
+    private static bool IsProcessFromGameDirectory(Process process, string gameDirectory)
+    {
+        try
+        {
+            var path = process.MainModule?.FileName;
+
+            // Only rule the process out if it is definitely running from a different install
+            return path == null || path.StartsWith(gameDirectory, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            // Windows can refuse access to another process's details (e.g. if it is running as administrator)
+            // A process with the game's name is most likely the game, so treat it as running to be safe
+            return true;
+        }
     }
 
     public EbonyArchive OpenArchive(string absolutePath)

@@ -96,8 +96,32 @@ public partial class EbonyArchive
         }
 
         archiveStream.Seek(0, SeekOrigin.Begin);
-        using var fileStream = new FileStream(path, FileMode.Create, FileAccess.Write);
-        archiveStream.CopyTo(fileStream);
+
+        // Write to a temporary file first and swap it in once complete,
+        // so a failure part-way through can never leave the destination half-written
+        var temporaryPath = path + ".tmp";
+        try
+        {
+            using (var fileStream = new FileStream(temporaryPath, FileMode.Create, FileAccess.Write))
+            {
+                archiveStream.CopyTo(fileStream);
+            }
+
+            File.Move(temporaryPath, path, true);
+        }
+        catch
+        {
+            try
+            {
+                File.Delete(temporaryPath);
+            }
+            catch
+            {
+                // The original error is more useful than one about cleaning up
+            }
+
+            throw;
+        }
     }
 
     private Stream SerializeHeader()
