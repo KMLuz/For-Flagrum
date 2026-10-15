@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Flagrum.Abstractions;
 using Flagrum.Abstractions.ModManager.Project;
 using Flagrum.Application.Features.ModManager.Data;
+using Flagrum.Application.Features.ModManager.FskImport;
 using Flagrum.Application.Features.ModManager.Instructions;
 using Flagrum.Application.Features.ModManager.Instructions.Abstractions;
 using Flagrum.Application.Features.ModManager.Services;
@@ -53,6 +54,10 @@ public sealed partial class Index
     [Inject] private ModMetadataService Metadata { get; set; }
     [Inject] private IAuthenticationService Authentication { get; set; }
     [Inject] private NavigationManager Navigation { get; set; }
+    [Inject] private FskImportService FskImport { get; set; }
+
+    private FskImportModal FskImportModal { get; set; }
+    private HashSet<Guid> _changedBuilds = [];
 
     private string SearchText { get; set; } = "";
     private ModStatusFilter StatusFilter { get; set; }
@@ -68,6 +73,7 @@ public sealed partial class Index
     public Guid? BusyModId { get; private set; }
 
     public ModMetadataService ModMetadata => Metadata;
+    public FskImportService FskBuilds => FskImport;
 
     private IFlagrumProject SelectedMod =>
         SelectedModId is { } id && ModManager.Projects.TryGetValue(id, out var mod) ? mod : null;
@@ -299,6 +305,7 @@ public sealed partial class Index
             {
                 await Task.Run(async () => await ModManagerService.DeleteMod(mod));
                 Metadata.Remove(mod.Identifier);
+                FskImport.Unlink(mod.Identifier);
                 if (SelectedModId == mod.Identifier)
                 {
                     SelectedModId = null;
@@ -314,6 +321,121 @@ public sealed partial class Index
         });
 
         Prompt.Open();
+    }
+
+    /// <summary>
+    /// Whether the FSK build this mod was made from has been re-exported since it was last synced.
+    /// </summary>
+    public bool HasBuildChanged(Guid modId) => _changedBuilds.Contains(modId);
+
+    private void RefreshBuildStatuses()
+    {
+        _changedBuilds = ModManager.Projects.Keys
+            .Where(FskImport.IsFskMod)
+            .Where(FskImport.HasBuildChanged)
+            .ToHashSet();
+    }
+
+    public void OnFskBuildsImported()
+    {
+        RefreshBuildStatuses();
+        StateHasChanged();
+    }
+
+    private Task OpenFskImport() => FskImportModal.Open();
+
+    /// <summary>
+    /// Updates a mod from its FSK build folder, re-applying it straight away if it's enabled.
+    /// </summary>
+    public void ResyncMod(IFlagrumProject mod)
+    {
+        if (BusyModId != null)
+        {
+            return;
+        }
+
+        var build = FskImport.TryLoadBuild(mod.Identifier);
+        if (build == null)
+        {
+            Alert.Open("Error", "Build Not Found",
+                "The build folder for this mod can't be found:<br/><br/>" +
+                System.Net.WebUtility.HtmlEncode(FskImport.GetBuildFolder(mod.Identifier) ?? "(unknown)"),
+                null, 500, 300);
+            return;
+        }
+
+        if (build.Problems.Count > 0)
+        {
+            Alert.Open("Error", "Build Has Problems",
+                string.Join("<br/>", build.Problems.Select(System.Net.WebUtility.HtmlEncode)), null, 600, 400, true);
+            return;
+        }
+
+        if (IsEnabled(mod) && Profile.IsGameRunning())
+        {
+            Alert.Open("Error", "The Game is Running",
+                "This mod is enabled, so Flagrum needs to re-apply it. " +
+                "Please save and close down the game, then try again.", null);
+            return;
+        }
+
+        BusyModId = mod.Identifier;
+        StateHasChanged();
+
+        ThreadHelper.RunOnNewThread(async () =>
+        {
+            try
+            {
+                await Task.Run(() => FskImport.ImportAsync(build));
+            }
+            catch (InvalidOperationException exception)
+            {
+                await InvokeAsync(() => Alert.Open("Error", "Couldn't Re-sync",
+                    System.Net.WebUtility.HtmlEncode(exception.Message).Replace("\n", "<br/>"), null, 600, 400, true));
+            }
+            catch (Exception exception)
+            {
+                ShowModOperationError(exception);
+            }
+
+            await InvokeAsync(() =>
+            {
+                BusyModId = null;
+                RefreshBuildStatuses();
+                StateHasChanged();
+            });
+        });
+    }
+
+    /// <summary>
+    /// Imports a zipped FSK build chosen through Install Mod.
+    /// </summary>
+    private async Task InstallFskZip(string path)
+    {
+        await InvokeAsync(() => SetLoading(true, "Importing Build"));
+
+        try
+        {
+            var mod = await Task.Run(() => FskImport.ImportZipAsync(path));
+            await InvokeAsync(() => Alert.Open("Success", "Build Imported",
+                $"Imported <strong>{System.Net.WebUtility.HtmlEncode(mod.Name)}</strong>. " +
+                "Use its Enabled/Disabled button to turn it on.", null, 450, 260));
+        }
+        catch (InvalidOperationException exception)
+        {
+            await InvokeAsync(() => Alert.Open("Error", "Couldn't Import Build",
+                System.Net.WebUtility.HtmlEncode(exception.Message).Replace("\n", "<br/>"), null, 600, 400, true));
+        }
+        catch (Exception exception)
+        {
+            ShowModOperationError(exception);
+        }
+
+        await InvokeAsync(() =>
+        {
+            SetLoading(false);
+            RefreshBuildStatuses();
+        });
     }
 
     public void EditMod(IFlagrumProject mod)

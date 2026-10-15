@@ -1,0 +1,233 @@
+@using System.Net
+@using Flagrum.Application.Features.ModManager.Services
+@inject FskImportService FskImport
+@inject IPlatformService PlatformService
+@inject ILogger<FskImportModal> Logger
+
+<AutosizeModal @ref="Modal" MinWidth="760px" MaxWidth="90%">
+    <HeaderView>
+        <span class="text-grey-300 flex-grow">Import FSK Builds</span>
+        @if (!IsImporting)
+        {
+            <span class="material-icons cursor-pointer" @onclick="() => Modal.Close()">cancel</span>
+        }
+    </HeaderView>
+    <BodyView>
+        <div class="flex flex-col" style="max-height: 70vh;">
+            <div class="row mb-4">
+                <span class="text-grey-500 text-sm mr-3">Builds folder</span>
+                <span class="text-grey-200 text-sm flex-grow truncate" title="@FskImport.BuildsFolder">
+                    @(FskImport.BuildsFolder ?? "Not chosen yet")
+                </span>
+                <Button Icon="folder" Text="Change Folder" CssClass="ml-3" IsDisabled="IsImporting" OnClickAsync="ChooseFolder"/>
+                <Button Icon="refresh" Text="Refresh" CssClass="ml-3" IsDisabled="IsImporting" OnClick="Scan"/>
+            </div>
+
+            @if (Builds.Count == 0)
+            {
+                <div class="text-center text-grey-500 py-10">
+                    @(FskImport.BuildsFolder == null
+                        ? "Choose the folder your Blender add-on exports builds into."
+                        : "No builds found. Each build needs its own folder containing an entries.txt file.")
+                </div>
+            }
+            else
+            {
+                <div class="grid items-center text-sm text-grey-500 pb-2 border-b border-dark-600"
+                     style="grid-template-columns: @Columns;">
+                    <span></span>
+                    <span>Build</span>
+                    <span>Outfit</span>
+                    <span>Files</span>
+                    <span>Build Log</span>
+                    <span>Status</span>
+                </div>
+                <div class="overflow-auto" style="min-height: 0;">
+                    @foreach (var info in Builds)
+                    {
+                        var canImport = info.Status != FskBuildStatus.Problem;
+                        <div class="grid items-center text-sm py-2 border-b border-dark-600"
+                             style="grid-template-columns: @Columns;">
+                            <div>
+                                @if (canImport)
+                                {
+                                    <Checkbox IsChecked="Selected.Contains(info.Build.FolderPath)"
+                                              OnChange="isChecked => SetSelected(info, isChecked)"/>
+                                }
+                            </div>
+                            <div class="pr-3" style="min-width: 0;">
+                                <span class="block truncate text-grey-200" title="@info.Build.FolderPath">@info.Build.Name</span>
+                                @if (info.Mod != null && !info.Mod.Name.Equals(info.Build.Name, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <span class="block truncate text-xs text-grey-500">updates mod "@info.Mod.Name"</span>
+                                }
+                            </div>
+                            <span class="text-grey-300">@(info.Build.Outfit ?? "—")</span>
+                            <span class="text-grey-300">@info.Build.Entries.Count</span>
+                            <span>
+                                @switch (info.Build.Result)
+                                {
+                                    case FskBuildResult.Pass:
+                                        <span class="rounded-sm px-1.5 bg-green-700 text-white">PASS</span>
+                                        break;
+                                    case FskBuildResult.Fail:
+                                        <span class="rounded-sm px-1.5 bg-error text-white">FAIL</span>
+                                        break;
+                                    default:
+                                        <span class="text-grey-500">—</span>
+                                        break;
+                                }
+                            </span>
+                            <span class="@StatusClass(info.Status)">@StatusText(info.Status)</span>
+                        </div>
+                        @if (info.Build.Problems.Count > 0)
+                        {
+                            <div class="text-xs text-error pb-2 border-b border-dark-600" style="padding-left: 40px; overflow-wrap: anywhere;">
+                                @foreach (var problem in info.Build.Problems.Take(5))
+                                {
+                                    <div>@problem</div>
+                                }
+                                @if (info.Build.Problems.Count > 5)
+                                {
+                                    <div>…and @(info.Build.Problems.Count - 5) more</div>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            }
+
+            <div class="row mt-5">
+                <span class="text-sm text-grey-400 flex-grow">@ProgressText</span>
+                <Button Icon="move_to_inbox"
+                        Text="@(IsImporting ? "Importing..." : $"Import {Selected.Count} build{(Selected.Count == 1 ? "" : "s")}")"
+                        IsDisabled="@(IsImporting || Selected.Count == 0)"
+                        OnClickAsync="ImportSelected"/>
+            </div>
+        </div>
+    </BodyView>
+</AutosizeModal>
+
+@code
+{
+    private const string Columns = "40px minmax(0, 1fr) 110px 60px 90px 110px";
+
+    [CascadingParameter] public Flagrum.Application.Features.ModManager.Index Parent { get; set; }
+
+    private AutosizeModal Modal { get; set; }
+    private List<FskBuildInfo> Builds { get; set; } = [];
+    private HashSet<string> Selected { get; } = new(StringComparer.OrdinalIgnoreCase);
+    private bool IsImporting { get; set; }
+    private string ProgressText { get; set; }
+
+    public async Task Open()
+    {
+        ProgressText = null;
+        Scan();
+        Modal.Open();
+
+        if (FskImport.BuildsFolder == null)
+        {
+            await ChooseFolder();
+        }
+    }
+
+    private void Scan()
+    {
+        Builds = FskImport.ScanBuildsFolder();
+
+        // Pre-select everything that's new or has been re-exported
+        Selected.Clear();
+        foreach (var info in Builds.Where(b => b.Status is FskBuildStatus.New or FskBuildStatus.Changed))
+        {
+            Selected.Add(info.Build.FolderPath);
+        }
+
+        StateHasChanged();
+    }
+
+    private Task ChooseFolder() =>
+        PlatformService.OpenFolderDialogAsync(FskImport.BuildsFolder ?? "", folder =>
+        {
+            FskImport.BuildsFolder = folder;
+            return InvokeAsync(Scan);
+        });
+
+    private void SetSelected(FskBuildInfo info, bool isChecked)
+    {
+        if (isChecked)
+        {
+            Selected.Add(info.Build.FolderPath);
+        }
+        else
+        {
+            Selected.Remove(info.Build.FolderPath);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task ImportSelected()
+    {
+        var toImport = Builds.Where(b => Selected.Contains(b.Build.FolderPath)).ToList();
+        IsImporting = true;
+        var imported = new List<string>();
+        var failed = new List<string>();
+
+        for (var i = 0; i < toImport.Count; i++)
+        {
+            var build = toImport[i].Build;
+            ProgressText = $"Importing {build.Name} ({i + 1} of {toImport.Count})...";
+            StateHasChanged();
+
+            try
+            {
+                await Task.Run(() => FskImport.ImportAsync(build));
+                imported.Add(build.Name);
+            }
+            catch (Exception exception)
+            {
+                Logger.LogError(exception, "Failed to import FSK build {Folder}", build.FolderPath);
+                failed.Add($"<strong>{WebUtility.HtmlEncode(build.Name)}</strong>: {DescribeHtml(exception)}");
+            }
+        }
+
+        IsImporting = false;
+        ProgressText = null;
+        Modal.Close();
+        Parent.OnFskBuildsImported();
+
+        if (failed.Count > 0)
+        {
+            var message = (imported.Count > 0 ? $"Imported {string.Join(", ", imported)}.<br/><br/>" : "")
+                          + "These builds couldn't be imported:<br/><br/>" + string.Join("<br/><br/>", failed);
+            Parent.Alert.Open("Warning", "Import Problems", message, null, 600, 400, true);
+        }
+        else
+        {
+            Parent.Alert.Open("Success", "Builds Imported",
+                $"Imported {WebUtility.HtmlEncode(string.Join(", ", imported))}. " +
+                "New mods start disabled, use their Enabled/Disabled button to turn them on.", null, 500, 300);
+        }
+    }
+
+    private static string DescribeHtml(Exception exception) => exception is InvalidOperationException
+        ? WebUtility.HtmlEncode(exception.Message).Replace("\n", "<br/>")
+        : ModOperationError.Describe(exception).Message;
+
+    private static string StatusText(FskBuildStatus status) => status switch
+    {
+        FskBuildStatus.New => "New",
+        FskBuildStatus.Changed => "Changed",
+        FskBuildStatus.UpToDate => "Up to date",
+        _ => "Can't import"
+    };
+
+    private static string StatusClass(FskBuildStatus status) => status switch
+    {
+        FskBuildStatus.New => "text-accent1-200",
+        FskBuildStatus.Changed => "text-curseforge",
+        FskBuildStatus.UpToDate => "text-grey-500",
+        _ => "text-error"
+    };
+}

@@ -4,6 +4,7 @@
 @using Flagrum.Application.Features.ModManager.Launcher
 @using Flagrum.Application.Features.ModManager.Modals
 @using Flagrum.Application.Features.ModManager.Services
+@using Flagrum.Application.Features.ModManager.FskImport
 @implements Flagrum.Abstractions.ModManager.IModLibrary
 
 @inject IPlatformService PlatformService
@@ -56,6 +57,7 @@
                         }
                     </select>
                     <div class="flex-grow"></div>
+                    <Button Icon="move_to_inbox" Text="Import Builds" CssClass="mr-4" OnClickAsync="OpenFskImport"/>
                     <Button Icon="add" Text=@Localizer["CreateMod"] CssClass="mr-4"
                             OnClick="@(() => ModCardModal.Open(Guid.Empty))"/>
                     <Button Icon="upload" Text=@Localizer["InstallFromZip"] OnClickAsync="Install"/>
@@ -107,6 +109,11 @@
                                                     <span class="material-icons text-accent1-200 mr-1" style="font-size: 0.9rem; rotate: 45deg;" title="Pinned">push_pin</span>
                                                 }
                                                 <span class="truncate @(isEnabled ? "text-grey-200" : "text-grey-400")">@mod.Name</span>
+                                                @if (HasBuildChanged(mod.Identifier))
+                                                {
+                                                    <span class="rounded-sm px-1.5 ml-2 text-xs bg-curseforge-dark text-white" style="flex-shrink: 0;"
+                                                          title="The build has been re-exported since this mod was last synced. Open the mod and click Re-sync.">Changed</span>
+                                                }
                                             </div>
                                             @if (!string.IsNullOrWhiteSpace(mod.Author))
                                             {
@@ -214,6 +221,7 @@
     <ModPackInstallModal @ref="ModPackInstallModal"/>
     <ModCardModal @ref="ModCardModal"/>
     <ExportModal @ref="ExportModal"/>
+    <FskImportModal @ref="FskImportModal"/>
     <PromptModal @ref="Prompt"/>
     <AlertModal @ref="Alert"/>
 

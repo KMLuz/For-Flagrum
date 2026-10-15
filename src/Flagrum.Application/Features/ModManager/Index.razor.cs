@@ -11,6 +11,7 @@ using Flagrum.Abstractions.ModManager.Project;
 using Flagrum.Components.Modals;
 using Flagrum.Core.Utilities;
 using Flagrum.Application.Features.ModManager.Data;
+using Flagrum.Application.Features.ModManager.FskImport;
 using Flagrum.Application.Features.ModManager.Installer;
 using Flagrum.Application.Features.ModManager.Instructions.Builders;
 using Flagrum.Application.Features.ModManager.Launcher;
@@ -80,6 +81,7 @@ public sealed partial class Index : ModComponentBase
 
         // Give mods from before the mod list existed an install date in one go
         Metadata.EnsureInstalledDates(ModManager.Projects.Keys);
+        RefreshBuildStatuses();
 
         foreach (var file in Directory.EnumerateFiles($@"{IOHelper.GetWebRoot()}\EarcMods"))
         {
@@ -159,6 +161,13 @@ public sealed partial class Index : ModComponentBase
 
     private async Task InstallMod(string path)
     {
+        // Zips exported by the FSK add-on are imported as builds rather than Flagrum mod packs
+        if (path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) && FskImportService.IsFskZip(path))
+        {
+            await InstallFskZip(path);
+            return;
+        }
+
         await InvokeAsync(() => SetLoading(true, Localizer["InstallingMod"]));
 
         await Task.Run(async () =>

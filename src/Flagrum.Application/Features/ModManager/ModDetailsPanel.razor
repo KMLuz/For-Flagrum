@@ -1,11 +1,14 @@
 @using System.IO
 @using Flagrum.Abstractions.ModManager.Project
 @using Flagrum.Application.Features.ModManager.Services
+@using Flagrum.Application.Features.ModManager.FskImport
 
 @{
     var files = Index.GetModFiles(Mod);
     var missingCount = files.Count(f => IsMissing(f.SourceFile));
     var hasReadme = !string.IsNullOrWhiteSpace(Mod.Readme) && Mod.Readme.Trim() != "<p><br></p>";
+    var isFskMod = Parent.FskBuilds.IsFskMod(Mod.Identifier);
+    var build = isFskMod ? Parent.FskBuilds.TryLoadBuild(Mod.Identifier) : null;
 }
 
 <div class="h-full flex flex-col bg-dark border-l border-dark-550" style="width: 400px; flex: 0 0 400px;">
@@ -64,6 +67,65 @@
                         OnClick="() => Parent.DeleteMod(Mod)"/>
             </div>
 
+            @if (isFskMod)
+            {
+                var status = build == null ? (FskBuildStatus?)null : Parent.FskBuilds.GetStatus(build, Mod);
+                <div class="rounded bg-grey-800 p-3 mb-6 text-sm">
+                    <div class="row mb-2">
+                        <span class="text-grey-300 font-display flex-grow">FSK Build</span>
+                        @switch (status)
+                        {
+                            case null:
+                                <span class="text-error">Folder not found</span>
+                                break;
+                            case FskBuildStatus.Changed:
+                                <span class="rounded-sm px-1.5 text-xs bg-curseforge-dark text-white">Changed</span>
+                                break;
+                            case FskBuildStatus.Problem:
+                                <span class="text-error">Has problems</span>
+                                break;
+                            default:
+                                <span class="text-grey-500">Up to date</span>
+                                break;
+                        }
+                    </div>
+                    <div class="text-xs text-grey-500 mb-1" style="overflow-wrap: anywhere;">
+                        @Parent.FskBuilds.GetBuildFolder(Mod.Identifier)
+                    </div>
+                    @if (Parent.FskBuilds.GetSyncedAt(Mod.Identifier) is { } syncedAt)
+                    {
+                        <div class="text-xs text-grey-500 mb-2">Last synced @syncedAt.ToString("d MMMM yyyy, HH:mm")</div>
+                    }
+                    @if (build?.Problems.Count > 0)
+                    {
+                        <div class="text-xs text-error mb-2" style="overflow-wrap: anywhere;">
+                            @foreach (var problem in build.Problems.Take(5))
+                            {
+                                <div>@problem</div>
+                            }
+                        </div>
+                    }
+                    <div class="row flex-wrap">
+                        <Button Icon="sync" Text="Re-sync" CssClass="mr-2 mb-2"
+                                IsDisabled="@(build == null || Parent.BusyModId != null)"
+                                OnClick="() => Parent.ResyncMod(Mod)"/>
+                        @if (build?.BuildLog != null)
+                        {
+                            <Button Icon="article" Text="@(ShowBuildLog ? "Hide Build Log" : "Build Log")" CssClass="mb-2"
+                                    OnClick="() => ShowBuildLog = !ShowBuildLog"/>
+                            <span class="ml-2 mb-2 rounded-sm px-1.5 text-xs text-white @(build.Result == FskBuildResult.Fail ? "bg-error" : build.Result == FskBuildResult.Pass ? "bg-green-700" : "bg-grey-700")">
+                                @(build.Result == FskBuildResult.Unknown ? "No result" : build.Result.ToString().ToUpper())
+                            </span>
+                        }
+                    </div>
+                    @if (ShowBuildLog && build?.BuildLog != null)
+                    {
+                        <pre class="text-xs text-grey-300 bg-dark rounded p-2 mt-1"
+                             style="max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;">@build.BuildLog</pre>
+                    }
+                </div>
+            }
+
             <div class="row mb-2">
                 <span class="text-grey-300 font-display flex-grow">Files (@files.Count)</span>
                 @if (missingCount > 0)
@@ -85,7 +147,7 @@
                 var isMissing = IsMissing(file.SourceFile);
                 <div class="rounded bg-grey-800 p-2 mb-2 text-xs" style="overflow-wrap: anywhere;">
                     <div class="row mb-1">
-                        <span class="rounded-sm px-1.5 mr-2 bg-grey-700 text-grey-300">@file.Action</span>
+                        <span class="rounded-sm px-1.5 mr-2 bg-grey-700 text-grey-300" style="white-space: nowrap; flex-shrink: 0;">@file.Action</span>
                         <span class="text-grey-200">@file.GameFile</span>
                     </div>
                     @if (file.SourceFile != null)
@@ -106,6 +168,19 @@
     [CascadingParameter] public Index Parent { get; set; }
 
     [Parameter] public IFlagrumProject Mod { get; set; }
+
+    private Guid _shownModId;
+    private bool ShowBuildLog { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        // Collapse the build log again when a different mod is selected
+        if (Mod.Identifier != _shownModId)
+        {
+            _shownModId = Mod.Identifier;
+            ShowBuildLog = false;
+        }
+    }
 
     private static bool IsMissing(string path) => !string.IsNullOrWhiteSpace(path) && !File.Exists(path);
 
