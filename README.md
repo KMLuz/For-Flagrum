@@ -11,6 +11,11 @@ Changes from Flagrum 1.6.5 include:
 - Fixes for crashes when mod files are in use, model preview crashes and out-of-date file indexes
 - No automatic updates or upstream version checks, so upstream releases can't replace or disable this fork
 
+## The FSK Blender add-on
+
+Outfit builds are made in Blender with the FSK (Forspoken Kit) add-on, which is included in [`addon/`](addon/).
+See [addon/README.md](addon/README.md) for how to install and use it.
+
 ## Installing
 
 You need the [.NET SDK](https://dotnet.microsoft.com/download) (8 or newer) on Windows.
