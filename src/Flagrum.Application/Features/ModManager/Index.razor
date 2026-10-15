@@ -6,6 +6,7 @@
 @using Flagrum.Application.Features.ModManager.Services
 @using Flagrum.Application.Features.ModManager.FskImport
 @implements Flagrum.Abstractions.ModManager.IModLibrary
+@implements IDisposable
 
 @inject IPlatformService PlatformService
 @inject GameLauncher Launcher

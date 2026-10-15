@@ -82,6 +82,7 @@ public sealed partial class Index : ModComponentBase
         // Give mods from before the mod list existed an install date in one go
         Metadata.EnsureInstalledDates(ModManager.Projects.Keys);
         RefreshBuildStatuses();
+        StartWatchingBuilds();
 
         foreach (var file in Directory.EnumerateFiles($@"{IOHelper.GetWebRoot()}\EarcMods"))
         {

@@ -183,11 +183,24 @@ public class FskImportService(
     }
 
     /// <summary>
+    /// Whether a mod was made from a zipped build (as opposed to a folder the add-on exported to).
+    /// </summary>
+    public bool IsFromZip(Guid modId)
+    {
+        var folder = GetBuildFolder(modId);
+        return folder != null && IOHelper.DoesPathStartWith(folder, ZipBuildsDirectory);
+    }
+
+    /// <summary>
     /// Creates a mod from a build, or updates the existing one. If the existing mod is enabled,
     /// it is turned off and back on so the game uses the new files straight away.
     /// </summary>
+    /// <param name="build">The build to import.</param>
+    /// <param name="newModName">
+    /// If set, always creates a new mod with this name instead of updating an existing one.
+    /// </param>
     /// <exception cref="InvalidOperationException">Thrown if the build has problems or a game file can't be found.</exception>
-    public async Task<IFlagrumProject> ImportAsync(FskBuild build)
+    public async Task<IFlagrumProject> ImportAsync(FskBuild build, string newModName = null)
     {
         if (build.Problems.Count > 0)
         {
@@ -218,7 +231,7 @@ public class FskImportService(
                 "or rebuild the file index in Settings:\n" + string.Join("\n", unknownFiles));
         }
 
-        var mod = FindModForBuild(build);
+        var mod = newModName == null ? FindModForBuild(build) : null;
         var isNew = mod == null;
         var wasEnabled = !isNew && modManager.ModsState.GetActive(mod.Identifier);
 
@@ -233,7 +246,7 @@ public class FskImportService(
             mod = new FlagrumProject
             {
                 Identifier = Guid.NewGuid(),
-                Name = build.Name,
+                Name = newModName ?? build.Name,
                 Author = "FSK",
                 Description = build.Outfit == null
                     ? "Imported from an FSK build."
@@ -297,9 +310,10 @@ public class FskImportService(
     }
 
     /// <summary>
-    /// Unpacks a zipped build and imports it.
+    /// Unpacks a zipped build into Flagrum's own folder, replacing any earlier copy of the same build.
     /// </summary>
-    public async Task<IFlagrumProject> ImportZipAsync(string zipPath)
+    /// <returns>The unpacked build, ready to import.</returns>
+    public FskBuild ExtractZip(string zipPath)
     {
         string buildFolder;
 
@@ -338,7 +352,7 @@ public class FskImportService(
             }
         }
 
-        return await ImportAsync(FskBuild.Load(buildFolder));
+        return FskBuild.Load(buildFolder);
     }
 
     /// <summary>

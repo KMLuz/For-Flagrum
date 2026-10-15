@@ -58,6 +58,8 @@ public sealed partial class Index
 
     private FskImportModal FskImportModal { get; set; }
     private HashSet<Guid> _changedBuilds = [];
+    private System.Threading.Timer _buildWatchTimer;
+    private bool _isCheckingBuilds;
 
     private string SearchText { get; set; } = "";
     private ModStatusFilter StatusFilter { get; set; }
@@ -336,6 +338,56 @@ public sealed partial class Index
             .ToHashSet();
     }
 
+    /// <summary>
+    /// Checks the build folders every few seconds so the Changed badge appears soon after a re-export,
+    /// without having to leave and reopen the mod list.
+    /// </summary>
+    private void StartWatchingBuilds()
+    {
+        _buildWatchTimer = new System.Threading.Timer(_ => CheckBuildsForChanges(), null,
+            TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private void CheckBuildsForChanges()
+    {
+        // Skip if the previous check is still running or a mod is being changed
+        if (_isCheckingBuilds || BusyModId != null || IsLoading)
+        {
+            return;
+        }
+
+        _isCheckingBuilds = true;
+        try
+        {
+            var changed = ModManager.Projects.Keys
+                .Where(FskImport.IsFskMod)
+                .Where(FskImport.HasBuildChanged)
+                .ToHashSet();
+
+            if (!changed.SetEquals(_changedBuilds))
+            {
+                InvokeAsync(() =>
+                {
+                    _changedBuilds = changed;
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (Exception)
+        {
+            // Builds can be mid-export when checked, so just try again next time
+        }
+        finally
+        {
+            _isCheckingBuilds = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _buildWatchTimer?.Dispose();
+    }
+
     public void OnFskBuildsImported()
     {
         RefreshBuildStatuses();
@@ -410,32 +462,89 @@ public sealed partial class Index
     /// <summary>
     /// Imports a zipped FSK build chosen through Install Mod.
     /// </summary>
+    /// <remarks>
+    /// A zip only updates a mod that was itself installed from a zip. If a mod with the same name comes from the
+    /// builds folder (or was made by hand), the user is asked whether to add the zip as a separate mod instead.
+    /// </remarks>
     private async Task InstallFskZip(string path)
+    {
+        await InvokeAsync(() => SetLoading(true, "Importing Build"));
+
+        FskBuild build;
+        try
+        {
+            build = await Task.Run(() => FskImport.ExtractZip(path));
+        }
+        catch (Exception exception)
+        {
+            ShowImportError(exception);
+            await InvokeAsync(() => SetLoading(false));
+            return;
+        }
+
+        var existing = FskImport.FindModForBuild(build);
+        if (existing != null && !FskImport.IsFromZip(existing.Identifier))
+        {
+            var source = FskImport.GetBuildFolder(existing.Identifier) is { } folder
+                ? $"comes from <strong>{System.Net.WebUtility.HtmlEncode(folder)}</strong>"
+                : "was made in Flagrum";
+            var newName = $"{build.Name} (zip)";
+
+            await InvokeAsync(() =>
+            {
+                SetLoading(false);
+                Prompt.Title = "Install Build";
+                Prompt.Heading = "This mod already exists";
+                Prompt.Subtext = $"Your mod <strong>{System.Net.WebUtility.HtmlEncode(existing.Name)}</strong> {source}. " +
+                                 "To keep it as it is, the zip will be added as a separate mod called " +
+                                 $"<strong>{System.Net.WebUtility.HtmlEncode(newName)}</strong>.";
+                Prompt.YesText = "Add Separate Mod";
+                Prompt.NoText = "Cancel";
+                Prompt.OnNo = null;
+                Prompt.OnYes = () => _ = ImportExtractedBuild(build, newName);
+                Prompt.Open();
+            });
+            return;
+        }
+
+        await ImportExtractedBuild(build, null);
+    }
+
+    private async Task ImportExtractedBuild(FskBuild build, string newModName)
     {
         await InvokeAsync(() => SetLoading(true, "Importing Build"));
 
         try
         {
-            var mod = await Task.Run(() => FskImport.ImportZipAsync(path));
+            var mod = await Task.Run(() => FskImport.ImportAsync(build, newModName));
             await InvokeAsync(() => Alert.Open("Success", "Build Imported",
                 $"Imported <strong>{System.Net.WebUtility.HtmlEncode(mod.Name)}</strong>. " +
                 "Use its Enabled/Disabled button to turn it on.", null, 450, 260));
         }
-        catch (InvalidOperationException exception)
-        {
-            await InvokeAsync(() => Alert.Open("Error", "Couldn't Import Build",
-                System.Net.WebUtility.HtmlEncode(exception.Message).Replace("\n", "<br/>"), null, 600, 400, true));
-        }
         catch (Exception exception)
         {
-            ShowModOperationError(exception);
+            ShowImportError(exception);
         }
 
         await InvokeAsync(() =>
         {
             SetLoading(false);
             RefreshBuildStatuses();
+            StateHasChanged();
         });
+    }
+
+    private void ShowImportError(Exception exception)
+    {
+        if (exception is InvalidOperationException)
+        {
+            InvokeAsync(() => Alert.Open("Error", "Couldn't Import Build",
+                System.Net.WebUtility.HtmlEncode(exception.Message).Replace("\n", "<br/>"), null, 600, 400, true));
+        }
+        else
+        {
+            ShowModOperationError(exception);
+        }
     }
 
     public void EditMod(IFlagrumProject mod)
