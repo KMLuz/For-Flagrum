@@ -1,5 +1,5 @@
 > [!NOTE]
-> **This is ForFlagrum**, a personal, Forspoken-only fork of Flagrum 1.6.5. The description below is the original
+> **This is ForFlagrum**, a Forspoken-focused fork of Flagrum 1.6.5. The description below is the original
 > Flagrum description by Kizari and doesn't fully represent this branch. See [README.md](../README.md) for what this
 > fork changes and how to install it.
 

@@ -16,7 +16,7 @@ turns into mods. It is made for creating outfit variants of Frey (`hu/hu000`).
    - **Game data folder**: the extracted game data, i.e. the folder that contains `asset`.
      You can extract the character's files with ForFlagrum's Asset Explorer (right-click the folder, Export Folder).
    - **Character**: `hu/hu000` for Frey.
-   - **Output folder**: where builds are written, e.g. `...\Frey\Builds`. Each build gets its own folder in here.
+   - **Output folder**: where builds are written, e.g. `D:\Modding\Builds`. Each build gets its own folder in here.
 
 ## Making a build
 
@@ -33,7 +33,7 @@ The add-on lives in the **Forspoken** tab of the 3D viewport's sidebar (press `N
    - **Auto LODs**: makes the lower detail levels for you, matching the game's proportions.
    - **Body uses the 400 skin material**: gives the outfit its own copy of the master body skin material.
    - **Write textures**, and **Shared skin in its own build**: see below.
-4. Give the build a name (this becomes the mod's name in ForFlagrum, e.g. `Jacket_NoPants`) and press
+4. Give the build a name (this becomes the mod's name in ForFlagrum, e.g. `My_Outfit`) and press
    **Export to Flagrum**.
 
 Each build folder contains the built model, materials and textures, an `entries.txt` listing which game files they

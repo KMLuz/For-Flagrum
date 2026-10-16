@@ -1,7 +1,7 @@
 # ForFlagrum
 
-A personal fork of [Flagrum](https://github.com/Kizari/Flagrum) 1.6.5 by Kizari, tuned for modding Forspoken
-(in particular, making many outfit variants of Frey with the FSK Blender add-on).
+A fork of [Flagrum](https://github.com/Kizari/Flagrum) 1.6.5 by Kizari, focused on modding Forspoken, in particular
+making outfit mods for Frey with the FSK Blender add-on.
 
 Changes from Flagrum 1.6.5 include:
 

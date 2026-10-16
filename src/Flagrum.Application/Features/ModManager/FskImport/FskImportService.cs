@@ -65,7 +65,7 @@ public class FskImportService(
         profile.Current.Id.ToString());
 
     /// <summary>
-    /// The folder the add-on exports builds into (e.g. <c>H:\...\Frey\Builds</c>), or null if not chosen yet.
+    /// The folder the add-on exports builds into (e.g. <c>D:\Modding\Builds</c>), or null if not chosen yet.
     /// </summary>
     public string BuildsFolder
     {

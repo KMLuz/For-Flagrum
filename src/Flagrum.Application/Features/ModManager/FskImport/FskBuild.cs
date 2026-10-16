@@ -37,7 +37,7 @@ public partial class FskBuild
     }
 
     /// <summary>
-    /// Name of the build, which is the name of its folder (e.g. <c>Jacket_NoPants</c>).
+    /// Name of the build, which is the name of its folder (e.g. <c>My_Outfit</c>).
     /// </summary>
     public string Name { get; }
 
