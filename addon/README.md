@@ -3,7 +3,7 @@
 FSK imports Forspoken character models into Blender and exports edited outfits as **builds** that ForFlagrum
 turns into mods. It is made for creating outfit variants of Frey (`hu/hu000`).
 
-- Version: 0.5.1
+- Version: 0.5.4
 - Requires: Blender 4.2 or newer, on Windows
 - Author: Luz (the importer is based on Flagrum by Kizari)
 
@@ -49,6 +49,25 @@ they go into a separate build, `Frey_Skin` by default, instead of into every out
   other.
 
 **Export textures only** updates the textures and body material without rebuilding the model.
+
+The face **_o** texture (ambient occlusion) is remembered per outfit, because each outfit's hair or hat shades the
+face differently. Outfits that use the base face material (like `hu000_110`) share one face _o in `Frey_Skin`.
+
+## Hair preview
+
+The **Hair Preview** panel in the Forspoken tab shows Frey's hair in Blender, so you can see where it falls while
+making an outfit. It's for looking only: hair can't be edited here and is never exported.
+
+- **Show hair** loads the hair named after the selected outfit (for example `hu000_110_hair_head`), or the file
+  chosen in the list above it. Hair files (`.gmdl_hair`) are found anywhere in the character folder of your game
+  data. Press the refresh button after exporting new ones.
+- **Import hair file...** (or **File > Import > Forspoken hair**) opens any `.gmdl_hair` file.
+- The hair appears as a collection with one object per hair group (bangs, back, top...), so parts can be hidden with
+  the eye icon in the Outliner. The objects can't be clicked in the viewport, so clicking still selects the head
+  and body underneath.
+- **Strand thickness** changes how thick the strands are drawn. The game draws more and finer hairs than the file
+  holds, so the preview looks thinner than in game.
+- Loading hair again replaces the current preview. **Remove hair preview** deletes it.
 
 ## Using builds in ForFlagrum
 
