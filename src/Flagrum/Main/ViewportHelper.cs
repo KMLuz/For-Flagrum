@@ -43,6 +43,7 @@ public partial class ViewportHelper
 
     private readonly ConcurrentDictionary<string, Lazy<byte[]?>> _textureImageCache = new();
     private int _latestRequest;
+    private (IAssetExplorerNode Node, AssetExplorerView View, int LodLevel)? _currentModel;
 
     /// <summary>
     /// Loads a model into the 3D viewport.
@@ -55,6 +56,10 @@ public partial class ViewportHelper
     public async Task<int> ChangeModelAsync(IAssetExplorerNode gmdlNode, AssetExplorerView view, int lodLevel)
     {
         var request = Interlocked.Increment(ref _latestRequest);
+        _currentModel = (gmdlNode, view, lodLevel);
+        _logger.LogInformation("Previewing {Path} at LOD {LodLevel}", gmdlNode.Path, lodLevel);
+
+        _viewModel.EnsureRenderer();
         _viewModel.Viewer!.Reset();
 
         BuiltModel? result;
@@ -100,6 +105,27 @@ public partial class ViewportHelper
         _viewModel.Viewer.ZoomExtents(0);
 
         return result.LodLevels;
+    }
+
+    /// <summary>
+    /// Loads the model that was last shown again, after the viewport had to be restarted.
+    /// </summary>
+    public async Task ReloadAsync()
+    {
+        if (_currentModel is var (node, view, lodLevel))
+        {
+            _logger.LogInformation("Reloading the model preview after a restart");
+
+            // Nothing awaits this, so an error here must not escape (unobserved task errors crash Flagrum)
+            try
+            {
+                await ChangeModelAsync(node, view, lodLevel);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "Failed to reload the model preview");
+            }
+        }
     }
 
     private record BuiltModel(List<SceneNode> Nodes, int LodLevels);

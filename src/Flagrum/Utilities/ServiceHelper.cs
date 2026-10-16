@@ -10,6 +10,7 @@ using Flagrum.Migrations;
 using Flagrum.Services;
 using Flagrum.Application.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
 
@@ -27,6 +28,12 @@ public static class ServiceHelper
         Log.Logger = new LoggerConfiguration()
             .WriteTo.File(path, LogEventLevel.Information, rollingInterval: RollingInterval.Day)
             .CreateLogger();
+
+        // HelixToolkit (the 3D model preview) keeps its own log, which otherwise goes nowhere.
+        // This has to be set before any of its types are used, as they create their loggers once.
+        HelixToolkit.Logger.LogManager.Factory = LoggerFactory.Create(builder => builder
+            .SetMinimumLevel(LogLevel.Warning)
+            .AddSerilog());
 
         // Populate the service collection
         var services = new ServiceCollection();

@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Flagrum.Application.Features.Settings.Data;
 using Flagrum.Application.Features.Shared;
@@ -14,6 +16,7 @@ using Flagrum.Utilities;
 using HelixToolkit.SharpDX.Core;
 using HelixToolkit.SharpDX.Core.Animations;
 using HelixToolkit.SharpDX.Core.Model.Scene;
+using HelixToolkit.SharpDX.Core.Utilities;
 using HelixToolkit.Wpf.SharpDX;
 using HelixToolkit.Wpf.SharpDX.Controls;
 using PropertyChanged.SourceGenerator;
@@ -27,8 +30,22 @@ namespace Flagrum.Main;
 
 public partial class ViewportViewModel : ObservableObject, IDisposable
 {
+    /// <summary>
+    /// If the viewport fails this many times within <see cref="RendererFailureWindow"/>, it stops restarting itself
+    /// straight away (the graphics card is probably busy) and tries again when the next model is opened.
+    /// </summary>
+    private const int MaxRendererFailures = 3;
+
+    private static readonly TimeSpan RendererFailureWindow = TimeSpan.FromSeconds(30);
+
     private readonly List<BoneSkinMeshNode> _armatureNodes = new();
     private readonly CompositionTargetEx _compositeHelper = new();
+    private readonly ILogger<ViewportViewModel> _logger;
+    private readonly Queue<DateTime> _rendererFailures = new();
+    private DateTime _lastGiveUpMessage = DateTime.MinValue;
+    private bool _isRendererLost;
+    private bool _isRestartQueued;
+    private Viewport3DX? _viewer;
 
     private NodeAnimationUpdater? _animationUpdater;
     [Notify] private Camera? _camera;
@@ -52,8 +69,10 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         IPlatformService platformService,
         IConfiguration configuration,
         TextureConverter textureConverter,
-        ILogger<ViewportHelper> viewportLogger)
+        ILogger<ViewportHelper> viewportLogger,
+        ILogger<ViewportViewModel> logger)
     {
+        _logger = logger;
         ((PlatformService)platformService).Viewport = this;
 
         // Set default key bindings for 3D viewer
@@ -96,7 +115,24 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     }
 
     public ViewportHelper? ViewportHelper { get; private set; }
-    public Viewport3DX? Viewer { get; set; }
+    public Viewport3DX? Viewer
+    {
+        get => _viewer;
+        set
+        {
+            if (_viewer != null)
+            {
+                _viewer.RenderExceptionOccurred -= Viewer_OnRenderExceptionOccurred;
+            }
+
+            _viewer = value;
+
+            if (_viewer != null)
+            {
+                _viewer.RenderExceptionOccurred += Viewer_OnRenderExceptionOccurred;
+            }
+        }
+    }
     public AirspacePopup? AirspacePopup { get; set; }
 
     public int ViewportLeft
@@ -148,6 +184,91 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         }
 
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Restarts the viewport if it stopped drawing earlier and hasn't been restarted yet.
+    /// </summary>
+    public void EnsureRenderer()
+    {
+        if (_isRendererLost && Viewer is {RenderHost: null})
+        {
+            RestartRenderer();
+        }
+    }
+
+    /// <summary>
+    /// HelixToolkit throws its renderer away after any error while drawing (for example when the graphics card
+    /// is busy with a game), which leaves the viewport black for good. Log the error and start a new renderer.
+    /// </summary>
+    private void Viewer_OnRenderExceptionOccurred(object? sender, RelayExceptionEventArgs e)
+    {
+        // Otherwise HelixToolkit writes the error over the viewport
+        e.Handled = true;
+        _isRendererLost = true;
+        _logger.LogError(e.Exception, "The 3D model preview stopped drawing");
+
+        var now = DateTime.UtcNow;
+        _rendererFailures.Enqueue(now);
+        while (now - _rendererFailures.Peek() > RendererFailureWindow)
+        {
+            _rendererFailures.Dequeue();
+        }
+
+        if (_isRestartQueued)
+        {
+            return;
+        }
+
+        // HelixToolkit disposes the old renderer after this handler, so restart once it's done
+        _isRestartQueued = true;
+        Viewer!.Dispatcher.InvokeAsync(() =>
+        {
+            _isRestartQueued = false;
+
+            if (_rendererFailures.Count >= MaxRendererFailures)
+            {
+                _logger.LogWarning("The 3D model preview failed {Count} times in {Seconds} seconds, "
+                                   + "it will be restarted when a model is opened", _rendererFailures.Count,
+                    RendererFailureWindow.TotalSeconds);
+
+                ModelGroup = null;
+                if (DateTime.UtcNow - _lastGiveUpMessage > RendererFailureWindow)
+                {
+                    _lastGiveUpMessage = DateTime.UtcNow;
+                    MessageBox.Show("The 3D preview stopped working, probably because the graphics card is busy "
+                                    + "(for example with a game). It will try again when you open a model.",
+                        "Model Preview", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+
+                return;
+            }
+
+            RestartRenderer();
+            _ = ViewportHelper!.ReloadAsync();
+        }, DispatcherPriority.Background);
+    }
+
+    private void RestartRenderer()
+    {
+        if (Viewer == null)
+        {
+            return;
+        }
+
+        _logger.LogInformation("Restarting the 3D model preview");
+        _isRendererLost = false;
+
+        // The model's GPU resources belonged to the old renderer, so it is reloaded from scratch
+        ModelGroup = null;
+
+        // A new effects manager also creates a new graphics device, in case the old one was lost
+        var oldEffectsManager = EffectsManager as IDisposable;
+        EffectsManager = new DefaultEffectsManager();
+        oldEffectsManager?.Dispose();
+
+        // HelixToolkit only creates its renderer when the viewport's template is applied
+        Viewer.OnApplyTemplate();
     }
 
     private void CompositeHelper_Rendering(object? sender, RenderingEventArgs e)

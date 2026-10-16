@@ -102,6 +102,11 @@ public class PlatformService : IPlatformService
     public void Set3DViewportVisibility(bool isVisible)
     {
         Viewport.IsViewportVisible = isVisible;
+        if (isVisible)
+        {
+            // Coming back to the preview restarts it if it stopped drawing while it was away
+            Viewport.EnsureRenderer();
+        }
     }
 
     public Task<int> ChangeModelAsync(IAssetExplorerNode gmdlNode, AssetExplorerView view, int lodLevel) =>
