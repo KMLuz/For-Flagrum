@@ -19,6 +19,7 @@ using Flagrum.Application.Features.ModManager.Modals;
 using Flagrum.Application.Features.ModManager.Services;
 using Flagrum.Application.Features.Shared;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Logging;
 
 namespace Flagrum.Application.Features.ModManager;
 
@@ -81,6 +82,19 @@ public sealed partial class Index : ModComponentBase
 
         // Give mods from before the mod list existed an install date in one go
         Metadata.EnsureInstalledDates(ModManager.Projects.Keys);
+
+        // Re-apply the enabled mods if the game files don't match them any more
+        if (!Profile.IsGameRunning())
+        {
+            try
+            {
+                await Task.Run(ModManager.EnsureEnabledModsApplied);
+            }
+            catch (Exception exception)
+            {
+                Logger.LogError(exception, "Failed to check that the enabled mods are applied");
+            }
+        }
         RefreshBuildStatuses();
         StartWatchingBuilds();
 

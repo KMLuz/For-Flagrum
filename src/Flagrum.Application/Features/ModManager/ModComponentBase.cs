@@ -26,7 +26,7 @@ public class ModComponentBase : ComponentBase
 
     [Inject] protected AppStateService AppState { get; set; }
 
-    [Inject] private ILogger<ModComponentBase> Logger { get; set; }
+    [Inject] protected ILogger<ModComponentBase> Logger { get; set; }
 
     [Parameter] public IFlagrumProject Mod { get; set; }
 

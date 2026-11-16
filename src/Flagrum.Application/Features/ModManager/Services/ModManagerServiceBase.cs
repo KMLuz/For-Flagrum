@@ -68,6 +68,13 @@ public abstract class ModManagerServiceBase
     /// <returns>A list of mod IDs that were active before the reset</returns>
     public abstract Guid[] Reset();
 
+    /// <summary>
+    /// Makes sure the game files have exactly the enabled mods applied, re-applying them if not
+    /// (for example after the game was updated or its files were checked by Steam).
+    /// </summary>
+    /// <returns>Whether anything had to be re-applied.</returns>
+    public virtual bool EnsureEnabledModsApplied() => false;
+
     protected abstract Task ApplyMod(IFlagrumProject mod, EbonyArchiveManager archiveManager);
     protected abstract Task RevertMod(IFlagrumProject mod);
 
