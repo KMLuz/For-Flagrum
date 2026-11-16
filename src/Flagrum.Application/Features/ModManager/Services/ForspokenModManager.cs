@@ -144,7 +144,8 @@ public class ForspokenModManager : ModManagerServiceBase
         }
 
         var expected = enabled.Select(m => m.Identifier).ToHashSet();
-        if (applied.SetEquals(expected) && enabled.All(m => File.Exists(GetModArchivePath(m.Identifier))))
+        if (applied.SetEquals(expected)
+            && enabled.All(m => IsModArchiveCurrent(m, m.Archives.SelectMany(e => e.Instructions).ToList())))
         {
             return false;
         }
