@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Flagrum.Abstractions;
 using Flagrum.Abstractions.Archive;
@@ -10,6 +12,7 @@ using Flagrum.Abstractions.ModManager.Instructions;
 using Flagrum.Abstractions.ModManager.Project;
 using Flagrum.Core.Archive;
 using Flagrum.Core.Utilities;
+using Cryptography = Flagrum.Core.Utilities.Cryptography;
 using Flagrum.Application.Features.AssetExplorer.Indexing;
 using Flagrum.Application.Features.ModManager.Instructions;
 using Flagrum.Application.Features.ModManager.Instructions.Abstractions;
@@ -163,11 +166,15 @@ public class ForspokenModManager : ModManagerServiceBase
         .ThenBy(p => p.Identifier);
 
     /// <summary>
-    /// Name of the file in the mod's archive that replaces the given game file. It is derived from the mod and the
-    /// file it replaces, so the redirect table can be rebuilt without rewriting the mod's archive.
+    /// Name of the file in the mod's archive that replaces the given game file. It has the same shape as the names
+    /// older versions gave these files (data://mods/&lt;guid&gt;.&lt;extension&gt;), but the GUID is derived from the mod
+    /// and the file it replaces, so the redirect table can be rebuilt without rewriting the mod's archive.
     /// </summary>
-    private static string GetModFileUri(IFlagrumProject mod, IPackedBuildInstruction file) =>
-        $"{ModReferencePrefix}{mod.Identifier:N}/{Cryptography.HashFileUri64(file.Uri):x16}.{file.Uri.Split('.').Last()}";
+    private static string GetModFileUri(IFlagrumProject mod, IPackedBuildInstruction file)
+    {
+        var guid = new Guid(MD5.HashData(Encoding.UTF8.GetBytes($"{mod.Identifier:N}|{file.Uri}")));
+        return $"{ModReferencePrefix}{guid}.{file.Uri.Split('.').Last()}";
+    }
 
     /// <summary>
     /// Writes the mod's archive to datas\mods from its cached, processed files.
