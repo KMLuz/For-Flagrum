@@ -10,6 +10,7 @@ Changes from Flagrum 1.6.5 include:
 - A Forspoken play button in the sidebar
 - Fixes for crashes when mod files are in use, model preview crashes and out-of-date file indexes
 - Faster model previews that restart themselves if the graphics card was busy, instead of staying black
+- Turning mods on and off, re-syncing and resetting no longer leave textures white or models invisible in game
 - No automatic updates or upstream version checks, so upstream releases can't replace or disable this fork
 
 ## The FSK Blender add-on

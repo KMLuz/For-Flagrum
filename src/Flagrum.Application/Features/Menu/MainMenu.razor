@@ -75,10 +75,8 @@
                 {
                     NewsModal.Open(Profile.LastVersion);
                 }
-                else
-                {
-                    await VersionNotesModal.OpenAsync(Profile.LastVersion);
-                }
+
+                // No version notes for ForFlagrum updates, as they are downloaded from the original Flagrum repository
 
                 // Clear build cache in case any build changes have been made in the new version that need to be applied
                 foreach (var file in Directory.EnumerateFiles(Profile.CacheDirectory))
